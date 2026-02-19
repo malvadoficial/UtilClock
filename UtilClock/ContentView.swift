@@ -79,6 +79,7 @@ struct ContentView: View {
         case snake
         case todayInHistory
         case musicThought
+        case rae
         case series
 
         var key: String {
@@ -98,6 +99,7 @@ struct ContentView: View {
             case .snake: return "snake"
             case .todayInHistory: return "todayInHistory"
             case .musicThought: return "musicThought"
+            case .rae: return "rae"
             case .series: return "series"
             }
         }
@@ -118,14 +120,15 @@ struct ContentView: View {
             case .missileCommand: return .snake
             case .snake: return .todayInHistory
             case .todayInHistory: return .musicThought
-            case .musicThought: return .audio
+            case .musicThought: return .rae
+            case .rae: return .audio
             case .series: return .audio
             }
         }
 
         var previous: UtilityMode {
             switch self {
-            case .audio: return .musicThought
+            case .audio: return .rae
             case .usb: return .audio
             case .storage: return .usb
             case .cpu: return .storage
@@ -140,7 +143,8 @@ struct ContentView: View {
             case .snake: return .missileCommand
             case .todayInHistory: return .snake
             case .musicThought: return .todayInHistory
-            case .series: return .musicThought
+            case .rae: return .musicThought
+            case .series: return .rae
             }
         }
     }
@@ -399,6 +403,9 @@ struct ContentView: View {
     @State private var musicThoughtTimer: Timer?
     @State private var musicThoughtLoading = false
     @State private var musicThoughtLastRefresh: Date?
+    @State private var raeSearchText = ""
+    @State private var raeResultLines: [String] = []
+    @State private var raeSearchRequestID = 0
     #endif
 
     var body: some View {
@@ -1065,6 +1072,9 @@ struct ContentView: View {
                         } else if utilityMode == .musicThought {
                             musicThoughtView
                                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                        } else if utilityMode == .rae {
+                            raeView
+                                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
                         } else if utilityMode == .series {
                             ZStack(alignment: .topLeading) {
                                 if seriesCurrentVideoURL != nil {
@@ -1574,6 +1584,8 @@ struct ContentView: View {
             return L10n.modeTodayInHistory
         case .musicThought:
             return L10n.modeMusicThought
+        case .rae:
+            return L10n.modeRAE
         case .series:
             return L10n.modeSeries
         }
@@ -4130,6 +4142,41 @@ struct ContentView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
+    private var raeView: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            TextField(L10n.raePlaceholder, text: $raeSearchText)
+                .font(.system(size: 31, weight: .medium, design: .monospaced))
+                .foregroundStyle(phosphorColor)
+                .textFieldStyle(.plain)
+                .padding(.horizontal, 18)
+                .frame(height: 62)
+                .background(Color.black.opacity(0.35))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(phosphorColor.opacity(0.55), lineWidth: 1.3)
+                )
+                .onSubmit {
+                    searchInRAE()
+                }
+
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 12) {
+                    ForEach(Array(raeResultLines.enumerated()), id: \.offset) { _, line in
+                        Text(line)
+                            .font(.system(size: 25, weight: .regular, design: .monospaced))
+                            .foregroundStyle(phosphorDim)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        }
+        .padding(.horizontal, 18)
+        .padding(.top, 56)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
     private func activateTodayInHistoryMode() {
         startTodayInHistoryTimerIfNeeded()
         fetchTodayInHistoryFromInternet(force: true)
@@ -4263,6 +4310,180 @@ struct ContentView: View {
     private func deactivateMusicThoughtMode() {
         musicThoughtTimer?.invalidate()
         musicThoughtTimer = nil
+    }
+
+    private func searchInRAE() {
+        let cleaned = raeSearchText
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+        guard cleaned.isEmpty == false else {
+            raeResultLines = [L10n.raeInvalidWord]
+            return
+        }
+        raeResultLines = [isSpanishLanguage ? "buscando..." : "searching..."]
+        raeSearchRequestID += 1
+        let requestID = raeSearchRequestID
+        let isSpanish = isSpanishLanguage
+
+        Task.detached(priority: .userInitiated) {
+            let rawOutput = Self.runRAECurlSearch(term: cleaned)
+            let lines = Self.parseRAEScrapedLines(from: rawOutput, term: cleaned, isSpanishLanguage: isSpanish)
+            await MainActor.run {
+                guard requestID == raeSearchRequestID else { return }
+                raeResultLines = lines
+            }
+        }
+    }
+
+    private nonisolated static func runRAECurlSearch(term: String) -> String {
+        let encoded = term.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? term
+        let directURL = "https://r.jina.ai/http://dle.rae.es/?w=\(encoded)"
+        let directOutput = runCurl(url: directURL)
+        if directOutput.contains("Definición") || directOutput.contains("Definicion") {
+            return directOutput
+        }
+
+        if let suggestedURL = extractSuggestedRAEEntryURL(from: directOutput) {
+            let suggestedOutput = runCurl(url: suggestedURL)
+            if suggestedOutput.isEmpty == false {
+                return suggestedOutput
+            }
+        }
+
+        let fallbackURL = "https://r.jina.ai/http://dle.rae.es/srv/search?m=30&w=\(encoded)"
+        let fallbackOutput = runCurl(url: fallbackURL)
+        if let suggestedURL = extractSuggestedRAEEntryURL(from: fallbackOutput) {
+            let suggestedOutput = runCurl(url: suggestedURL)
+            if suggestedOutput.isEmpty == false {
+                return suggestedOutput
+            }
+        }
+
+        return fallbackOutput.isEmpty ? directOutput : fallbackOutput
+    }
+
+    private nonisolated static func runCurl(url: String) -> String {
+        let process = Process()
+        let outputPipe = Pipe()
+        let errorPipe = Pipe()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/curl")
+        process.arguments = ["-sS", "-L", "--max-time", "15", url]
+        process.standardOutput = outputPipe
+        process.standardError = errorPipe
+
+        do {
+            try process.run()
+            process.waitUntilExit()
+        } catch {
+            return ""
+        }
+
+        let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
+        if process.terminationStatus == 0, let output = String(data: outputData, encoding: .utf8) {
+            return output
+        }
+
+        let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
+        if let errorText = String(data: errorData, encoding: .utf8), errorText.isEmpty == false {
+            return errorText
+        }
+        return ""
+    }
+
+    private nonisolated static func extractSuggestedRAEEntryURL(from raw: String) -> String? {
+        guard raw.isEmpty == false else { return nil }
+        let pattern = #"https?://dle\.rae\.es/[^\s\)"]+"#
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) else {
+            return nil
+        }
+        let range = NSRange(raw.startIndex..<raw.endIndex, in: raw)
+        let matches = regex.matches(in: raw, options: [], range: range)
+        for match in matches {
+            guard let valueRange = Range(match.range, in: raw) else { continue }
+            let found = String(raw[valueRange])
+            if found.contains("?w=") || found.contains("/srv/search") || found.contains("/m=wotd") {
+                continue
+            }
+            return "https://r.jina.ai/\(found)"
+        }
+        return nil
+    }
+
+    private nonisolated static func parseRAEScrapedLines(from raw: String, term: String, isSpanishLanguage: Bool) -> [String] {
+        guard raw.isEmpty == false else {
+            return [isSpanishLanguage ? "error consultando RAE" : "error fetching RAE"]
+        }
+
+        var body = raw.replacingOccurrences(of: "\r\n", with: "\n")
+        if let markerRange = body.range(of: "Markdown Content:") {
+            body = String(body[markerRange.upperBound...])
+        }
+
+        let lowered = body.lowercased()
+        let hasNoLemmaMatch =
+            lowered.contains("no se ha encontrado ningún lema coincidente") ||
+            lowered.contains("no se ha encontrado ningun lema coincidente") ||
+            lowered.contains("no matching lemma")
+        let hasNotInDictionary =
+            lowered.contains("no está en el diccionario") ||
+            lowered.contains("no esta en el diccionario")
+        if hasNoLemmaMatch {
+            return [
+                isSpanishLanguage
+                    ? "La palabra \"\(term)\" no está en el diccionario."
+                    : "The word \"\(term)\" is not in the dictionary."
+            ]
+        }
+        if hasNotInDictionary,
+           lowered.contains("definición") == false,
+           lowered.contains("definicion") == false {
+            return [
+                isSpanishLanguage
+                    ? "La palabra \"\(term)\" no está en el diccionario."
+                    : "The word \"\(term)\" is not in the dictionary."
+            ]
+        }
+
+        if let definitionRange = body.range(of: "\nDefinición\n", options: [.caseInsensitive]) {
+            body = String(body[definitionRange.lowerBound...])
+        }
+        if let dayRange = body.range(of: "\nPalabra del día", options: [.caseInsensitive]) {
+            body = String(body[..<dayRange.lowerBound])
+        }
+        if let resourcesRange = body.range(of: "\nOtros diccionarios y recursos", options: [.caseInsensitive]) {
+            body = String(body[..<resourcesRange.lowerBound])
+        }
+
+        let lines = body
+            .components(separatedBy: .newlines)
+            .map { line in
+                var value = line.trimmingCharacters(in: .whitespacesAndNewlines)
+                value = value.replacingOccurrences(of: #"\[(.*?)\]\([^)]+\)"#, with: "$1", options: .regularExpression)
+                value = value.replacingOccurrences(of: #"_([^_]+)_"#, with: "$1", options: .regularExpression)
+                value = value.replacingOccurrences(of: #"^###\s+"#, with: "", options: .regularExpression)
+                value = value.replacingOccurrences(of: #"^\d+\.\s+\d+\.\s*"#, with: "", options: .regularExpression)
+                value = value.replacingOccurrences(of: #"^\d+\.\s*"#, with: "", options: .regularExpression)
+                value = value.replacingOccurrences(of: #" {2,}"#, with: " ", options: .regularExpression)
+                return value.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            .filter { line in
+                line.isEmpty == false &&
+                line != "----------" &&
+                line != "Definición" &&
+                line.hasPrefix("Title:") == false &&
+                line.hasPrefix("URL Source:") == false &&
+                line.hasPrefix("Markdown Content:") == false
+            }
+
+        let result = Array(lines.prefix(24))
+        if result.isEmpty {
+            return [
+                isSpanishLanguage
+                    ? "sin resultados para \"\(term)\""
+                    : "no results for \"\(term)\""
+            ]
+        }
+        return result
     }
 
     private func startMusicThoughtTimerIfNeeded() {

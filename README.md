@@ -18,6 +18,7 @@ UtilClock es una app para macOS con estética de monitor monocromo que combina r
   - Afinador
   - Detector de acordes
   - Buscador de acordes
+  - Búsqueda de palabras en RAE
   - Tal día
   - Frase musical
   - Pong / Arkanoid / Snake / Missile Command

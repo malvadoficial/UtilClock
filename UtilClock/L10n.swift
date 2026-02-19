@@ -123,6 +123,10 @@ enum L10n {
         text(es: "ver al azar", en: "random watch")
     }
 
+    static var modeRAE: String {
+        text(es: "rae", en: "rae")
+    }
+
     static var start: String {
         text(es: "start", en: "start")
     }
@@ -213,6 +217,30 @@ enum L10n {
 
     static var seriesHint: String {
         text(es: "elige carpeta y click para cambiar", en: "choose folder and click to switch")
+    }
+
+    static var raePlaceholder: String {
+        text(es: "palabra (ej: casa)", en: "word (e.g. house)")
+    }
+
+    static var raeSearch: String {
+        text(es: "buscar en rae", en: "search in rae")
+    }
+
+    static var raeOpenInBrowser: String {
+        text(es: "abrir en navegador", en: "open in browser")
+    }
+
+    static var raeHint: String {
+        text(es: "escribe una palabra y pulsa buscar", en: "type a word and press search")
+    }
+
+    static var raeInvalidWord: String {
+        text(es: "palabra no valida", en: "invalid word")
+    }
+
+    static var raeLastSearch: String {
+        text(es: "ultima busqueda", en: "last search")
     }
 
 }
