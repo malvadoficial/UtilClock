@@ -4058,7 +4058,7 @@ struct ContentView: View {
     private var rotatingTodayInHistoryEvents: [ThisDayEvent] {
         let source = activeTodayInHistoryEvents
         guard source.isEmpty == false else { return [] }
-        let count = min(5, source.count)
+        let count = 5
         let offset = source.isEmpty ? 0 : (todayEventsRotationOffset % source.count)
         return (0..<count).map { source[($0 + offset) % source.count] }
     }
@@ -4189,13 +4189,13 @@ struct ContentView: View {
 
     private func startTodayInHistoryTimerIfNeeded() {
         guard todayEventsTimer == nil else { return }
-        let timer = Timer.scheduledTimer(withTimeInterval: 10.0, repeats: true) { _ in
+        let timer = Timer.scheduledTimer(withTimeInterval: 300.0, repeats: true) { _ in
             if activeTodayInHistoryEvents.isEmpty == false {
                 todayEventsRotationOffset = (todayEventsRotationOffset + 1) % max(1, activeTodayInHistoryEvents.count)
             }
             fetchTodayInHistoryFromInternet(force: true)
         }
-        timer.tolerance = 0.8
+        timer.tolerance = 5.0
         RunLoop.main.add(timer, forMode: .common)
         todayEventsTimer = timer
     }
