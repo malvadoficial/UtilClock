@@ -488,6 +488,7 @@ struct ContentView: View {
     @State private var todayEventsTimer: Timer?
     @State private var todayEventsLastRefresh: Date?
     @State private var todayEventsLoading = false
+    @State private var todayEventsInitialLoadCompleted = false
     @State private var musicThoughtQuotes: [MusicThoughtQuote] = []
     @State private var musicThoughtIndex = 0
     @State private var musicThoughtTimer: Timer?
@@ -4310,7 +4311,8 @@ struct ContentView: View {
     }
 
     private var activeTodayInHistoryEvents: [ThisDayEvent] {
-        todayInternetEvents.isEmpty ? todayInHistoryLocalEvents : todayInternetEvents
+        guard todayEventsInitialLoadCompleted else { return [] }
+        return todayInternetEvents.isEmpty ? todayInHistoryLocalEvents : todayInternetEvents
     }
 
     private var rotatingTodayInHistoryEvents: [ThisDayEvent] {
@@ -4352,6 +4354,10 @@ struct ContentView: View {
                 .padding(.top, 56)
                 .padding(.bottom, 10)
             }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                advanceTodayInHistoryEventsBlock()
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
@@ -4388,6 +4394,10 @@ struct ContentView: View {
                     .padding(.horizontal, 18)
                     .padding(.top, 56)
                     .padding(.bottom, 12)
+                }
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    advanceMusicThoughtQuote()
                 }
             } else if musicThoughtLoading == false {
                 Text(isSpanishLanguage ? "sin frases disponibles" : "no thoughts available")
@@ -4437,6 +4447,7 @@ struct ContentView: View {
 
     private func activateTodayInHistoryMode() {
         startTodayInHistoryTimerIfNeeded()
+        updateTodayInHistoryRotationForCurrentHour()
         fetchTodayInHistoryFromInternet(force: true)
     }
 
@@ -4447,20 +4458,37 @@ struct ContentView: View {
 
     private func startTodayInHistoryTimerIfNeeded() {
         guard todayEventsTimer == nil else { return }
-        let timer = Timer.scheduledTimer(withTimeInterval: 300.0, repeats: true) { _ in
-            if activeTodayInHistoryEvents.isEmpty == false {
-                todayEventsRotationOffset = (todayEventsRotationOffset + 1) % max(1, activeTodayInHistoryEvents.count)
-            }
-            fetchTodayInHistoryFromInternet(force: true)
+        let timer = Timer.scheduledTimer(withTimeInterval: 3600.0, repeats: true) { _ in
+            updateTodayInHistoryRotationForCurrentHour()
+            fetchTodayInHistoryFromInternet(force: false)
         }
-        timer.tolerance = 5.0
+        timer.tolerance = 30.0
         RunLoop.main.add(timer, forMode: .common)
         todayEventsTimer = timer
     }
 
+    private func updateTodayInHistoryRotationForCurrentHour() {
+        let events = activeTodayInHistoryEvents
+        guard events.isEmpty == false else {
+            todayEventsRotationOffset = 0
+            return
+        }
+
+        let blockSize = 5
+        let hour = Calendar.current.component(.hour, from: Date())
+        todayEventsRotationOffset = (hour * blockSize) % events.count
+    }
+
+    private func advanceTodayInHistoryEventsBlock() {
+        let events = activeTodayInHistoryEvents
+        guard events.isEmpty == false else { return }
+        let blockSize = 5
+        todayEventsRotationOffset = (todayEventsRotationOffset + blockSize) % events.count
+    }
+
     private func fetchTodayInHistoryFromInternet(force: Bool) {
         if todayEventsLoading { return }
-        if force == false, let last = todayEventsLastRefresh, Date().timeIntervalSince(last) < 60 {
+        if force == false, let last = todayEventsLastRefresh, Date().timeIntervalSince(last) < 3600 {
             return
         }
         todayEventsLoading = true
@@ -4547,13 +4575,15 @@ struct ContentView: View {
                     let hasChanges = finalEvents.map(\.id) != todayInternetEvents.map(\.id)
                     if hasChanges {
                         todayInternetEvents = finalEvents
-                        todayEventsRotationOffset = 0
-                        todayEventsLastRefresh = Date()
                     }
+                    todayEventsInitialLoadCompleted = true
+                    updateTodayInHistoryRotationForCurrentHour()
+                    todayEventsLastRefresh = Date()
                     todayEventsLoading = false
                 }
             } catch {
                 await MainActor.run {
+                    todayEventsInitialLoadCompleted = true
                     todayEventsLoading = false
                 }
             }
@@ -4746,15 +4776,21 @@ struct ContentView: View {
 
     private func startMusicThoughtTimerIfNeeded() {
         guard musicThoughtTimer == nil else { return }
-        let timer = Timer.scheduledTimer(withTimeInterval: 60.0, repeats: true) { _ in
-            if musicThoughtQuotes.isEmpty == false {
-                musicThoughtIndex = (musicThoughtIndex + 1) % max(1, musicThoughtQuotes.count)
-            }
+        let timer = Timer.scheduledTimer(withTimeInterval: 3600.0, repeats: true) { _ in
+            advanceMusicThoughtQuote()
             fetchMusicThoughtQuotes(force: false)
         }
-        timer.tolerance = 2.0
+        timer.tolerance = 30.0
         RunLoop.main.add(timer, forMode: .common)
         musicThoughtTimer = timer
+    }
+
+    private func advanceMusicThoughtQuote() {
+        guard musicThoughtQuotes.isEmpty == false else {
+            fetchMusicThoughtQuotes(force: true)
+            return
+        }
+        musicThoughtIndex = (musicThoughtIndex + 1) % max(1, musicThoughtQuotes.count)
     }
 
     private func fetchMusicThoughtQuotes(force: Bool) {

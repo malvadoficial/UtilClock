@@ -1,6 +1,8 @@
 # UtilClock
 
-UtilClock es una app para macOS con estética de monitor monocromo que combina reloj y utilidades en dos subpantallas.
+UtilClock es una app para macOS con estética retro monocroma que combina reloj y utilidades en dos subpantallas.
+
+Esta aplicación se ha desarrollado utilizando **Codex de OpenAI** y está pensada para usarse en pantallas pequeñas, como la **Hagibis**.
 
 ## Características
 
@@ -27,6 +29,17 @@ UtilClock es una app para macOS con estética de monitor monocromo que combina r
   - Reordenar modos
   - Color del display
   - Ajustes de tamaño para juegos
+
+## Capturas
+
+> Sustituye los archivos en `docs/screenshots/` por tus imágenes finales.
+
+![Captura 1](docs/screenshots/01.png)
+![Captura 2](docs/screenshots/02.png)
+![Captura 3](docs/screenshots/03.png)
+![Captura 4](docs/screenshots/04.png)
+![Captura 5](docs/screenshots/05.png)
+![Captura 6](docs/screenshots/06.png)
 
 ## Requisitos
 

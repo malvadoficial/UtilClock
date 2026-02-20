@@ -183,6 +183,26 @@ enum L10n {
         text(es: "sin procesos para mostrar", en: "no processes to display")
     }
 
+    static var quitApp: String {
+        text(es: "cerrar aplicacion", en: "quit app")
+    }
+
+    static var quitAppTitle: String {
+        text(es: "cerrar aplicacion", en: "quit app")
+    }
+
+    static var quitAppConfirmationMessage: String {
+        text(es: "se cerrara UtilClock. ¿quieres continuar?", en: "UtilClock will close. Do you want to continue?")
+    }
+
+    static var cancel: String {
+        text(es: "cancelar", en: "cancel")
+    }
+
+    static var quit: String {
+        text(es: "salir", en: "quit")
+    }
+
     static var systemVolume: String {
         text(es: "volumen del sistema", en: "system volume")
     }
