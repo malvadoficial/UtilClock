@@ -68,6 +68,8 @@ struct ContentView: View {
         case audio
         case storage
         case cpu
+        case apps
+        case processes
         case volume
         case metronome
         case tuner
@@ -88,6 +90,8 @@ struct ContentView: View {
             case .audio: return "audio"
             case .storage: return "storage"
             case .cpu: return "cpu"
+            case .apps: return "apps"
+            case .processes: return "processes"
             case .volume: return "volume"
             case .metronome: return "metronome"
             case .tuner: return "tuner"
@@ -109,7 +113,9 @@ struct ContentView: View {
             case .audio: return .usb
             case .usb: return .storage
             case .storage: return .cpu
-            case .cpu: return .volume
+            case .cpu: return .apps
+            case .apps: return .processes
+            case .processes: return .volume
             case .volume: return .metronome
             case .metronome: return .tuner
             case .tuner: return .chordDetect
@@ -132,7 +138,9 @@ struct ContentView: View {
             case .usb: return .audio
             case .storage: return .usb
             case .cpu: return .storage
-            case .volume: return .cpu
+            case .apps: return .cpu
+            case .processes: return .apps
+            case .volume: return .processes
             case .metronome: return .volume
             case .tuner: return .metronome
             case .chordDetect: return .tuner
@@ -176,6 +184,21 @@ struct ContentView: View {
         let es: String
         let en: String
     }
+
+    #if os(macOS)
+    private struct RunningAppUsage: Identifiable {
+        let id: Int32
+        let name: String
+        let cpuPercent: Double
+        let icon: NSImage
+    }
+
+    private struct RunningProcessUsage: Identifiable {
+        let id: Int32
+        let name: String
+        let cpuPercent: Double
+    }
+    #endif
 
     private enum MissileTargetKind {
         case city(Int)
@@ -307,6 +330,8 @@ struct ContentView: View {
     @State private var chordGeneratedVoicings: [ChordVoicing] = []
     #if os(macOS)
     @State private var hostWindow: NSWindow?
+    @State private var runningAppsUsage: [RunningAppUsage] = []
+    @State private var runningProcessesUsage: [RunningProcessUsage] = []
     @StateObject private var usbMonitor = USBVolumeMonitor()
     @State private var flashOpacity: Double = 0
     @State private var knownVolumeIDs: Set<String> = []
@@ -1189,6 +1214,86 @@ struct ContentView: View {
                             }
                             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                             .padding(.top, 64)
+                        } else if utilityMode == .apps {
+                            VStack(spacing: 12) {
+                                if runningAppsUsage.isEmpty {
+                                    Text(L10n.noRunningAppsCPUData)
+                                        .font(.system(size: max(14, dateSize * 0.95), weight: .regular, design: .monospaced))
+                                        .foregroundStyle(phosphorDim)
+                                } else {
+                                    ScrollView(.vertical, showsIndicators: false) {
+                                        VStack(spacing: 8) {
+                                            ForEach(runningAppsUsage) { app in
+                                                HStack(spacing: 10) {
+                                                    Image(nsImage: app.icon)
+                                                        .resizable()
+                                                        .interpolation(.high)
+                                                        .frame(width: max(16, dateSize * 1.05), height: max(16, dateSize * 1.05))
+                                                        .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+
+                                                    Text(app.name)
+                                                        .font(.system(size: max(13, dateSize * 0.95), weight: .regular, design: .monospaced))
+                                                        .foregroundStyle(phosphorColor)
+                                                        .lineLimit(1)
+                                                        .truncationMode(.tail)
+
+                                                    Spacer(minLength: 8)
+
+                                                    Text(String(format: "%.1f%%", app.cpuPercent))
+                                                        .font(.system(size: max(13, dateSize * 0.95), weight: .semibold, design: .monospaced))
+                                                        .foregroundStyle(phosphorDim)
+                                                        .monospacedDigit()
+                                                }
+                                                .padding(.horizontal, 12)
+                                            }
+                                        }
+                                        .padding(.top, 2)
+                                    }
+                                    .frame(maxWidth: .infinity)
+                                }
+                            }
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                            .padding(.top, 40)
+                        } else if utilityMode == .processes {
+                            VStack(spacing: 12) {
+                                if runningProcessesUsage.isEmpty {
+                                    Text(L10n.noRunningProcessesCPUData)
+                                        .font(.system(size: max(14, dateSize * 0.95), weight: .regular, design: .monospaced))
+                                        .foregroundStyle(phosphorDim)
+                                } else {
+                                    ScrollView(.vertical, showsIndicators: false) {
+                                        VStack(spacing: 8) {
+                                            ForEach(runningProcessesUsage) { process in
+                                                HStack(spacing: 10) {
+                                                    Text("\(process.id)")
+                                                        .font(.system(size: max(12, dateSize * 0.85), weight: .regular, design: .monospaced))
+                                                        .foregroundStyle(phosphorDim)
+                                                        .frame(width: max(44, dateSize * 2.6), alignment: .leading)
+                                                        .lineLimit(1)
+
+                                                    Text(process.name)
+                                                        .font(.system(size: max(13, dateSize * 0.95), weight: .regular, design: .monospaced))
+                                                        .foregroundStyle(phosphorColor)
+                                                        .lineLimit(1)
+                                                        .truncationMode(.middle)
+
+                                                    Spacer(minLength: 8)
+
+                                                    Text(String(format: "%.1f%%", process.cpuPercent))
+                                                        .font(.system(size: max(13, dateSize * 0.95), weight: .semibold, design: .monospaced))
+                                                        .foregroundStyle(phosphorDim)
+                                                        .monospacedDigit()
+                                                }
+                                                .padding(.horizontal, 12)
+                                            }
+                                        }
+                                        .padding(.top, 2)
+                                    }
+                                    .frame(maxWidth: .infinity)
+                                }
+                            }
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                            .padding(.top, 40)
                         } else if utilityMode == .storage {
                             utilityVolumesList(
                                 usbMonitor.storageVolumes,
@@ -1562,6 +1667,10 @@ struct ContentView: View {
             return L10n.modeStorage
         case .cpu:
             return L10n.modeCPU
+        case .apps:
+            return L10n.modeApps
+        case .processes:
+            return L10n.modeProcesses
         case .volume:
             return L10n.modeVolume
         case .metronome:
@@ -2435,6 +2544,10 @@ struct ContentView: View {
             refreshAudioDeviceName()
         } else if mode == .cpu {
             refreshCPUUsage()
+        } else if mode == .apps {
+            refreshRunningAppsUsage()
+        } else if mode == .processes {
+            refreshRunningProcessesUsage()
         } else if mode == .volume {
             refreshSystemAudioState(triggerOnMuteTransition: false)
         } else if mode == .tuner || mode == .chordDetect {
@@ -5090,6 +5203,147 @@ struct ContentView: View {
         refreshMemoryUsage()
     }
 
+    private func refreshRunningAppsUsage() {
+        let cpuByPID = cpuUsageByPID()
+        let runningApps = NSWorkspace.shared.runningApplications
+            .filter { app in
+                app.isTerminated == false &&
+                app.activationPolicy == .regular &&
+                app.bundleURL != nil &&
+                app.bundleIdentifier != nil
+            }
+            .map { app -> RunningAppUsage in
+                let pid = app.processIdentifier
+                let appName = app.localizedName ?? app.bundleURL?.deletingPathExtension().lastPathComponent ?? "app"
+                let icon = app.icon ?? NSWorkspace.shared.icon(forFile: app.bundleURL?.path ?? "")
+                icon.size = NSSize(width: 32, height: 32)
+                return RunningAppUsage(
+                    id: pid,
+                    name: appName,
+                    cpuPercent: max(0, cpuByPID[pid] ?? 0),
+                    icon: icon
+                )
+            }
+            .sorted { lhs, rhs in
+                if abs(lhs.cpuPercent - rhs.cpuPercent) > 0.001 {
+                    return lhs.cpuPercent > rhs.cpuPercent
+                }
+                return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+            }
+
+        runningAppsUsage = Array(runningApps.prefix(12))
+    }
+
+    private func refreshRunningProcessesUsage() {
+        let processes = cpuAndCommandByPID()
+            .map { pid, data in
+                RunningProcessUsage(
+                    id: pid,
+                    name: data.command,
+                    cpuPercent: data.cpuPercent
+                )
+            }
+            .sorted { lhs, rhs in
+                if abs(lhs.cpuPercent - rhs.cpuPercent) > 0.001 {
+                    return lhs.cpuPercent > rhs.cpuPercent
+                }
+                return lhs.id < rhs.id
+            }
+
+        runningProcessesUsage = Array(processes.prefix(20))
+    }
+
+    private func cpuAndCommandByPID() -> [pid_t: (cpuPercent: Double, command: String)] {
+        guard let output = runPS(arguments: ["-A", "-o", "pid=,%cpu=,comm="])
+            ?? runPS(arguments: ["-eo", "pid=,%cpu=,comm="]) else {
+            return [:]
+        }
+
+        var result: [pid_t: (cpuPercent: Double, command: String)] = [:]
+        for line in output.split(whereSeparator: \.isNewline) {
+            let parts = line.split(maxSplits: 2, whereSeparator: \.isWhitespace)
+            guard parts.count >= 2,
+                  let pid = pid_t(String(parts[0])) else { continue }
+
+            let cpuText = String(parts[1]).replacingOccurrences(of: ",", with: ".")
+            guard let cpu = Double(cpuText) else { continue }
+
+            let fullCommand = parts.count >= 3
+                ? String(parts[2]).trimmingCharacters(in: .whitespacesAndNewlines)
+                : ""
+            let displayName = URL(fileURLWithPath: fullCommand).lastPathComponent
+            let command = displayName.isEmpty ? (fullCommand.isEmpty ? "process-\(pid)" : fullCommand) : displayName
+            result[pid] = (cpuPercent: max(0, cpu), command: command)
+        }
+
+        return result
+    }
+
+    private func runPS(arguments: [String]) -> String? {
+        let process = Process()
+        let outputPipe = Pipe()
+        process.executableURL = URL(fileURLWithPath: "/bin/ps")
+        process.arguments = arguments
+        var env = ProcessInfo.processInfo.environment
+        env["LC_ALL"] = "C"
+        env["LANG"] = "C"
+        process.environment = env
+        process.standardOutput = outputPipe
+        process.standardError = Pipe()
+
+        do {
+            try process.run()
+        } catch {
+            return nil
+        }
+
+        let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else { return nil }
+        guard let output = String(data: outputData, encoding: .utf8), output.isEmpty == false else {
+            return nil
+        }
+        return output
+    }
+
+    private func cpuUsageByPID() -> [pid_t: Double] {
+        let process = Process()
+        let outputPipe = Pipe()
+        process.executableURL = URL(fileURLWithPath: "/bin/ps")
+        process.arguments = ["-A", "-o", "pid=,%cpu="]
+        var env = ProcessInfo.processInfo.environment
+        env["LC_ALL"] = "C"
+        env["LANG"] = "C"
+        process.environment = env
+        process.standardOutput = outputPipe
+        process.standardError = Pipe()
+
+        do {
+            try process.run()
+        } catch {
+            return [:]
+        }
+
+        let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else { return [:] }
+        guard let output = String(data: outputData, encoding: .utf8), output.isEmpty == false else {
+            return [:]
+        }
+
+        var result: [pid_t: Double] = [:]
+        for line in output.split(whereSeparator: \.isNewline) {
+            let columns = line.split(whereSeparator: \.isWhitespace)
+            guard columns.count >= 2,
+                  let pid = pid_t(String(columns[0])) else { continue }
+            let cpuText = String(columns[1]).replacingOccurrences(of: ",", with: ".")
+            guard let cpu = Double(cpuText) else { continue }
+            result[pid] = max(0, cpu)
+        }
+
+        return result
+    }
+
     private var memoryUsageText: String {
         let usedText = USBVolumeMonitor.compactByteString(memoryUsedBytes)
         let totalText = USBVolumeMonitor.compactByteString(memoryTotalBytes)
@@ -5125,17 +5379,21 @@ struct ContentView: View {
 
     private func startHousekeepingTimer() {
         stopHousekeepingTimer()
-        let timer = Timer.scheduledTimer(withTimeInterval: 0.45, repeats: true) { _ in
+        let timer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { _ in
             Task { @MainActor in
                 refreshSystemAudioState(triggerOnMuteTransition: true)
                 if utilityMode == .audio {
                     refreshAudioDeviceName()
                 } else if utilityMode == .cpu {
                     refreshCPUUsage()
+                } else if utilityMode == .apps {
+                    refreshRunningAppsUsage()
+                } else if utilityMode == .processes {
+                    refreshRunningProcessesUsage()
                 }
             }
         }
-        timer.tolerance = 0.05
+        timer.tolerance = 0.03
         RunLoop.main.add(timer, forMode: .common)
         housekeepingTimer = timer
     }

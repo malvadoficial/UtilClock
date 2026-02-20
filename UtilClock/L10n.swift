@@ -75,6 +75,14 @@ enum L10n {
         text(es: "cpu", en: "cpu")
     }
 
+    static var modeApps: String {
+        text(es: "apps", en: "apps")
+    }
+
+    static var modeProcesses: String {
+        text(es: "procesos", en: "processes")
+    }
+
     static var modeVolume: String {
         text(es: "volumen", en: "volume")
     }
@@ -161,6 +169,18 @@ enum L10n {
 
     static var cpuUsage: String {
         text(es: "uso cpu", en: "cpu usage")
+    }
+
+    static var runningAppsCPU: String {
+        text(es: "apps en ejecucion (cpu)", en: "running apps (cpu)")
+    }
+
+    static var noRunningAppsCPUData: String {
+        text(es: "sin apps para mostrar", en: "no apps to display")
+    }
+
+    static var noRunningProcessesCPUData: String {
+        text(es: "sin procesos para mostrar", en: "no processes to display")
     }
 
     static var systemVolume: String {
