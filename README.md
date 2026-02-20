@@ -32,8 +32,6 @@ Esta aplicación se ha desarrollado utilizando **Codex de OpenAI** y está pensa
 
 ## Capturas
 
-> Sustituye los archivos en `docs/screenshots/` por tus imágenes finales.
-
 ![Captura 1](docs/screenshots/01.png)
 ![Captura 2](docs/screenshots/02.png)
 ![Captura 3](docs/screenshots/03.png)
