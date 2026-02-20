@@ -12,7 +12,7 @@ import Combine
 final class ClockViewModel: ObservableObject {
     @Published private(set) var now = Date()
 
-    private let timerQueue = DispatchQueue(label: "utilclock.clock.timer", qos: .userInteractive)
+    private let timerQueue = DispatchQueue(label: "utilclock.clock.timer", qos: .utility)
     private var timer: DispatchSourceTimer?
     private var lastPublishedSecond: Int64 = -1
     private let timeFormatter: DateFormatter
@@ -63,12 +63,11 @@ final class ClockViewModel: ObservableObject {
 
         now = Date()
         lastPublishedSecond = Int64(floor(now.timeIntervalSince1970))
-
         let newTimer = DispatchSource.makeTimerSource(queue: timerQueue)
         newTimer.schedule(
             deadline: .now(),
             repeating: .milliseconds(120),
-            leeway: .milliseconds(1)
+            leeway: .milliseconds(20)
         )
         newTimer.setEventHandler { [weak self] in
             guard let self else { return }

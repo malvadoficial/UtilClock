@@ -13,9 +13,15 @@ import Darwin
 import AVFoundation
 import AVKit
 import QuartzCore
+import UniformTypeIdentifiers
 #endif
 
 struct ContentView: View {
+    #if os(macOS)
+    private let gameLoopIntervalMs = 16
+    private let gameLoopLeewayMs = 4
+    #endif
+
     #if os(macOS)
     private struct DisplayTarget: Identifiable {
         let id: UInt32
@@ -198,6 +204,62 @@ struct ContentView: View {
         let name: String
         let cpuPercent: Double
     }
+
+    private struct TopModeDropDelegate: DropDelegate {
+        let target: TopClockMode
+        @Binding var items: [TopClockMode]
+        @Binding var draggedItem: TopClockMode?
+        let onReorder: () -> Void
+
+        func dropEntered(info: DropInfo) {
+            guard let draggedItem,
+                  draggedItem != target,
+                  let from = items.firstIndex(of: draggedItem),
+                  let to = items.firstIndex(of: target) else { return }
+
+            withAnimation {
+                items.move(fromOffsets: IndexSet(integer: from), toOffset: to > from ? (to + 1) : to)
+            }
+            onReorder()
+        }
+
+        func dropUpdated(info: DropInfo) -> DropProposal? {
+            DropProposal(operation: .move)
+        }
+
+        func performDrop(info: DropInfo) -> Bool {
+            draggedItem = nil
+            return true
+        }
+    }
+
+    private struct UtilityModeDropDelegate: DropDelegate {
+        let target: UtilityMode
+        @Binding var items: [UtilityMode]
+        @Binding var draggedItem: UtilityMode?
+        let onReorder: () -> Void
+
+        func dropEntered(info: DropInfo) {
+            guard let draggedItem,
+                  draggedItem != target,
+                  let from = items.firstIndex(of: draggedItem),
+                  let to = items.firstIndex(of: target) else { return }
+
+            withAnimation {
+                items.move(fromOffsets: IndexSet(integer: from), toOffset: to > from ? (to + 1) : to)
+            }
+            onReorder()
+        }
+
+        func dropUpdated(info: DropInfo) -> DropProposal? {
+            DropProposal(operation: .move)
+        }
+
+        func performDrop(info: DropInfo) -> Bool {
+            draggedItem = nil
+            return true
+        }
+    }
     #endif
 
     private enum MissileTargetKind {
@@ -296,6 +358,7 @@ struct ContentView: View {
     @State private var utilityMode: UtilityMode = .audio
     @State private var displayPalette: DisplayPalette = .green
     @State private var showSettings = false
+    @State private var showQuitAppConfirmation = false
     @State private var enabledTopModes: Set<TopClockMode> = Set(TopClockMode.allCases)
     @State private var enabledUtilityModes: Set<UtilityMode> = Set(UtilityMode.allCases)
     @State private var topModeOrder: [TopClockMode] = TopClockMode.allCases
@@ -329,6 +392,8 @@ struct ContentView: View {
     @State private var parsedChord: ParsedChord?
     @State private var chordGeneratedVoicings: [ChordVoicing] = []
     #if os(macOS)
+    @State private var draggedTopMode: TopClockMode?
+    @State private var draggedUtilityMode: UtilityMode?
     @State private var hostWindow: NSWindow?
     @State private var runningAppsUsage: [RunningAppUsage] = []
     @State private var runningProcessesUsage: [RunningProcessUsage] = []
@@ -2329,25 +2394,42 @@ struct ContentView: View {
                             .font(.system(size: 13, weight: .regular, design: .monospaced))
                             .foregroundStyle(phosphorDim)
 
-                        ForEach(topModeOrder, id: \.self) { mode in
-                            HStack(spacing: 10) {
-                                Toggle(isOn: topModeToggleBinding(for: mode)) {
+                        VStack(spacing: 7) {
+                            ForEach(topModeOrder, id: \.self) { mode in
+                                HStack(spacing: 10) {
+                                    Text("≡")
+                                        .font(.system(size: 14, weight: .semibold, design: .monospaced))
+                                        .foregroundStyle(phosphorDim)
+                                        .onDrag {
+                                            draggedTopMode = mode
+                                            return NSItemProvider(object: NSString(string: mode.key))
+                                        }
+                                    Button(action: {
+                                        setTopMode(mode, enabled: enabledTopModes.contains(mode) == false)
+                                    }) {
+                                        Image(systemName: enabledTopModes.contains(mode) ? "checkmark.square.fill" : "square")
+                                            .font(.system(size: 17, weight: .medium))
+                                            .foregroundStyle(enabledTopModes.contains(mode) ? phosphorColor : phosphorDim)
+                                    }
+                                    .buttonStyle(.plain)
                                     Text(topModeLabel(for: mode))
                                         .font(.system(size: 18, weight: .regular, design: .monospaced))
                                         .foregroundStyle(phosphorColor)
+                                    Spacer(minLength: 0)
                                 }
-                                .toggleStyle(.checkbox)
-                                Spacer()
-                                HStack(spacing: 6) {
-                                    Button("↑") { moveTopMode(mode, up: true) }
-                                        .buttonStyle(.plain)
-                                        .font(.system(size: 14, weight: .semibold, design: .monospaced))
-                                        .foregroundStyle(phosphorDim)
-                                    Button("↓") { moveTopMode(mode, up: false) }
-                                        .buttonStyle(.plain)
-                                        .font(.system(size: 14, weight: .semibold, design: .monospaced))
-                                        .foregroundStyle(phosphorDim)
-                                }
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 8)
+                                .background(Color.black.opacity(0.18))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                        .stroke(phosphorColor.opacity(0.2), lineWidth: 1)
+                                )
+                                .onDrop(of: [UTType.text], delegate: TopModeDropDelegate(
+                                    target: mode,
+                                    items: $topModeOrder,
+                                    draggedItem: $draggedTopMode,
+                                    onReorder: { saveModeVisibilitySettings() }
+                                ))
                             }
                         }
 
@@ -2362,82 +2444,132 @@ struct ContentView: View {
                             .font(.system(size: 13, weight: .regular, design: .monospaced))
                             .foregroundStyle(phosphorDim)
 
-                        ForEach(utilityModeOrder.filter { $0 != .series }, id: \.self) { mode in
-                            HStack(spacing: 12) {
-                                Toggle(isOn: utilityModeToggleBinding(for: mode)) {
+                        VStack(spacing: 7) {
+                            ForEach(utilityModeOrder.filter { $0 != .series }, id: \.self) { mode in
+                                HStack(spacing: 12) {
+                                    Text("≡")
+                                        .font(.system(size: 14, weight: .semibold, design: .monospaced))
+                                        .foregroundStyle(phosphorDim)
+                                        .frame(width: 18, alignment: .center)
+                                        .onDrag {
+                                            draggedUtilityMode = mode
+                                            return NSItemProvider(object: NSString(string: mode.key))
+                                        }
+                                    Button(action: {
+                                        setUtilityMode(mode, enabled: enabledUtilityModes.contains(mode) == false)
+                                    }) {
+                                        Image(systemName: enabledUtilityModes.contains(mode) ? "checkmark.square.fill" : "square")
+                                            .font(.system(size: 17, weight: .medium))
+                                            .foregroundStyle(enabledUtilityModes.contains(mode) ? phosphorColor : phosphorDim)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .frame(width: 22, alignment: .center)
                                     Text(utilityModeLabel(for: mode))
                                         .font(.system(size: 18, weight: .regular, design: .monospaced))
                                         .foregroundStyle(phosphorColor)
-                                }
-                                .toggleStyle(.checkbox)
+                                        .frame(width: 210, alignment: .leading)
 
-                                HStack(spacing: 6) {
-                                    Button("↑") { moveUtilityMode(mode, up: true) }
-                                        .buttonStyle(.plain)
-                                        .font(.system(size: 14, weight: .semibold, design: .monospaced))
-                                        .foregroundStyle(phosphorDim)
-                                    Button("↓") { moveUtilityMode(mode, up: false) }
-                                        .buttonStyle(.plain)
-                                        .font(.system(size: 14, weight: .semibold, design: .monospaced))
-                                        .foregroundStyle(phosphorDim)
-                                }
+                                    Spacer(minLength: 0)
 
-                                if mode == .pong {
-                                    Text("size \(pongFieldSizeLevel)")
-                                        .font(.system(size: 16, weight: .semibold, design: .monospaced))
-                                        .foregroundStyle(phosphorDim)
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 4)
-                                        .background(Color.black.opacity(0.35))
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 5, style: .continuous)
-                                                .stroke(phosphorColor.opacity(0.45), lineWidth: 1)
-                                        )
-                                        #if os(macOS)
-                                        .overlay(
-                                            MouseClickCatcher(
-                                                onLeftClick: { rotatePongFieldSize(forward: true) },
-                                                onRightClick: { rotatePongFieldSize(forward: false) }
+                                    if mode == .pong {
+                                        Text("size \(pongFieldSizeLevel)")
+                                            .font(.system(size: 16, weight: .semibold, design: .monospaced))
+                                            .foregroundStyle(phosphorDim)
+                                            .padding(.horizontal, 8)
+                                            .padding(.vertical, 4)
+                                            .background(Color.black.opacity(0.35))
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                                    .stroke(phosphorColor.opacity(0.45), lineWidth: 1)
                                             )
-                                        )
-                                        #else
-                                        .onTapGesture {
-                                            rotatePongFieldSize(forward: true)
-                                        }
-                                        #endif
-                                }
-
-                                if mode == .snake {
-                                    Text("size \(snakeBoardSizeLevel)")
-                                        .font(.system(size: 16, weight: .semibold, design: .monospaced))
-                                        .foregroundStyle(phosphorDim)
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 4)
-                                        .background(Color.black.opacity(0.35))
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 5, style: .continuous)
-                                                .stroke(phosphorColor.opacity(0.45), lineWidth: 1)
-                                        )
-                                        #if os(macOS)
-                                        .overlay(
-                                            MouseClickCatcher(
-                                                onLeftClick: { rotateSnakeBoardSize(forward: true) },
-                                                onRightClick: { rotateSnakeBoardSize(forward: false) }
+                                            #if os(macOS)
+                                            .overlay(
+                                                MouseClickCatcher(
+                                                    onLeftClick: { rotatePongFieldSize(forward: true) },
+                                                    onRightClick: { rotatePongFieldSize(forward: false) }
+                                                )
                                             )
-                                        )
-                                        #else
-                                        .onTapGesture {
-                                            rotateSnakeBoardSize(forward: true)
-                                        }
-                                        #endif
+                                            #else
+                                            .onTapGesture {
+                                                rotatePongFieldSize(forward: true)
+                                            }
+                                            #endif
+                                    }
+
+                                    if mode == .snake {
+                                        Text("size \(snakeBoardSizeLevel)")
+                                            .font(.system(size: 16, weight: .semibold, design: .monospaced))
+                                            .foregroundStyle(phosphorDim)
+                                            .padding(.horizontal, 8)
+                                            .padding(.vertical, 4)
+                                            .background(Color.black.opacity(0.35))
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                                    .stroke(phosphorColor.opacity(0.45), lineWidth: 1)
+                                            )
+                                            #if os(macOS)
+                                            .overlay(
+                                                MouseClickCatcher(
+                                                    onLeftClick: { rotateSnakeBoardSize(forward: true) },
+                                                    onRightClick: { rotateSnakeBoardSize(forward: false) }
+                                                )
+                                            )
+                                            #else
+                                            .onTapGesture {
+                                                rotateSnakeBoardSize(forward: true)
+                                            }
+                                            #endif
+                                    }
                                 }
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 8)
+                                .background(Color.black.opacity(0.18))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                        .stroke(phosphorColor.opacity(0.2), lineWidth: 1)
+                                )
+                                .onDrop(of: [UTType.text], delegate: UtilityModeDropDelegate(
+                                    target: mode,
+                                    items: $utilityModeOrder,
+                                    draggedItem: $draggedUtilityMode,
+                                    onReorder: { saveModeVisibilitySettings() }
+                                ))
                             }
+                        }
+
+                        HStack {
+                            Spacer()
+                            Button(role: .destructive) {
+                                showQuitAppConfirmation = true
+                            } label: {
+                                Text(L10n.quitApp)
+                                    .font(.system(size: 14, weight: .semibold, design: .monospaced))
+                                    .foregroundStyle(Color.red.opacity(0.9))
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 8)
+                                    .background(Color.black.opacity(0.45))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                            .stroke(Color.red.opacity(0.55), lineWidth: 1)
+                                    )
+                            }
+                            .buttonStyle(.plain)
                         }
                     }
                     .padding(.horizontal, 24)
                     .padding(.bottom, 26)
                 }
             }
+        }
+        .alert(L10n.quitAppTitle, isPresented: $showQuitAppConfirmation) {
+            Button(L10n.cancel, role: .cancel) { }
+            Button(L10n.quit, role: .destructive) {
+                #if os(macOS)
+                NSApp.terminate(nil)
+                #endif
+            }
+        } message: {
+            Text(L10n.quitAppConfirmationMessage)
         }
     }
 
@@ -2508,6 +2640,19 @@ struct ContentView: View {
         let target = up ? index - 1 : index + 1
         guard utilityModeOrder.indices.contains(target) else { return }
         utilityModeOrder.swapAt(index, target)
+        saveModeVisibilitySettings()
+    }
+
+    private func moveTopModes(from source: IndexSet, to destination: Int) {
+        topModeOrder.move(fromOffsets: source, toOffset: destination)
+        saveModeVisibilitySettings()
+    }
+
+    private func moveUtilityModes(from source: IndexSet, to destination: Int) {
+        var filtered = utilityModeOrder.filter { $0 != .series }
+        filtered.move(fromOffsets: source, toOffset: destination)
+        let hasSeries = utilityModeOrder.contains(.series)
+        utilityModeOrder = hasSeries ? (filtered + [.series]) : filtered
         saveModeVisibilitySettings()
     }
 
@@ -2944,8 +3089,8 @@ struct ContentView: View {
     private func startPongLoopIfNeeded() {
         guard pongTimer == nil else { return }
         var lastTick = CACurrentMediaTime()
-        let timer = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .userInteractive))
-        timer.schedule(deadline: .now(), repeating: .milliseconds(8), leeway: .milliseconds(1))
+        let timer = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .userInitiated))
+        timer.schedule(deadline: .now(), repeating: .milliseconds(gameLoopIntervalMs), leeway: .milliseconds(gameLoopLeewayMs))
         timer.setEventHandler {
             let now = CACurrentMediaTime()
             let delta = max(1.0 / 240.0, min(1.0 / 25.0, now - lastTick))
@@ -3221,8 +3366,8 @@ struct ContentView: View {
     private func startArkanoidLoopIfNeeded() {
         guard arkanoidTimer == nil else { return }
         var lastTick = CACurrentMediaTime()
-        let timer = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .userInteractive))
-        timer.schedule(deadline: .now(), repeating: .milliseconds(8), leeway: .milliseconds(1))
+        let timer = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .userInitiated))
+        timer.schedule(deadline: .now(), repeating: .milliseconds(gameLoopIntervalMs), leeway: .milliseconds(gameLoopLeewayMs))
         timer.setEventHandler {
             let now = CACurrentMediaTime()
             let delta = max(1.0 / 240.0, min(1.0 / 25.0, now - lastTick))
@@ -3569,8 +3714,8 @@ struct ContentView: View {
     private func startMissileCommandLoopIfNeeded() {
         guard missileTimer == nil else { return }
         var lastTick = CACurrentMediaTime()
-        let timer = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .userInteractive))
-        timer.schedule(deadline: .now(), repeating: .milliseconds(8), leeway: .milliseconds(1))
+        let timer = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .userInitiated))
+        timer.schedule(deadline: .now(), repeating: .milliseconds(gameLoopIntervalMs), leeway: .milliseconds(gameLoopLeewayMs))
         timer.setEventHandler {
             let now = CACurrentMediaTime()
             let delta = max(1.0 / 240.0, min(1.0 / 20.0, now - lastTick))
@@ -3962,8 +4107,8 @@ struct ContentView: View {
         snakeLastStepTime = CACurrentMediaTime()
         snakeStepAccumulator = 0
         snakeRenderProgress = 1
-        let timer = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .userInteractive))
-        timer.schedule(deadline: .now(), repeating: .milliseconds(8), leeway: .milliseconds(1))
+        let timer = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .userInitiated))
+        timer.schedule(deadline: .now(), repeating: .milliseconds(gameLoopIntervalMs), leeway: .milliseconds(gameLoopLeewayMs))
         timer.setEventHandler {
             let now = CACurrentMediaTime()
             DispatchQueue.main.async {
@@ -5379,7 +5524,7 @@ struct ContentView: View {
 
     private func startHousekeepingTimer() {
         stopHousekeepingTimer()
-        let timer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { _ in
+        let timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { _ in
             Task { @MainActor in
                 refreshSystemAudioState(triggerOnMuteTransition: true)
                 if utilityMode == .audio {
@@ -5393,7 +5538,7 @@ struct ContentView: View {
                 }
             }
         }
-        timer.tolerance = 0.03
+        timer.tolerance = 0.1
         RunLoop.main.add(timer, forMode: .common)
         housekeepingTimer = timer
     }
@@ -5693,8 +5838,8 @@ struct ContentView: View {
         let bpm = Double(max(20, metronomeBPM))
         let beatUnitFactor = 4.0 / Double(metronomeDenominator)
         let interval = max(0.03, (60.0 / bpm) * beatUnitFactor)
-        let timer = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .userInteractive))
-        timer.schedule(deadline: .now() + interval, repeating: interval, leeway: .milliseconds(1))
+        let timer = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .userInitiated))
+        timer.schedule(deadline: .now() + interval, repeating: interval, leeway: .milliseconds(4))
         timer.setEventHandler {
             DispatchQueue.main.async {
                 guard metronomeRunning else { return }
