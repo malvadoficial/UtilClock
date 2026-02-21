@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.1.1 - 2026-02-21
+
+- Startup display selection is now remembered between launches.
+- Added settings option to forget saved startup display selection (applies on next launch).
+- Fixed startup display picker showing on every launch despite a saved selection.
+- Fixed audio capture staying active outside tuner/chord-detect modes.
+
 ## v1.1.0 - 2026-02-21
 
 - Added top stopwatch mode before countdown.

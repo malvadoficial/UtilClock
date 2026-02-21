@@ -43,6 +43,7 @@ final class TunerEngine: ObservableObject {
     private let selectedInputKey = "tuner.selectedInputID"
     private let selectedSourcePrefix = "tuner.selectedSourceID."
     private let virtualSourceBaseID: UInt32 = 10_000_000
+    private var shouldBeRunning = false
     private var recentMidiValues: [Double] = []
     private var smoothedMidi: Double?
     private var smoothedChordChroma: [Double] = Array(repeating: 0, count: 12)
@@ -68,6 +69,7 @@ final class TunerEngine: ObservableObject {
     }
 
     func start() {
+        shouldBeRunning = true
         if isRunning { return }
         guard ensureOrRequestMicrophonePermission() else { return }
 
@@ -88,6 +90,7 @@ final class TunerEngine: ObservableObject {
     }
 
     func stop() {
+        shouldBeRunning = false
         if tapInstalled {
             engine.inputNode.removeTap(onBus: 0)
             tapInstalled = false
@@ -702,7 +705,7 @@ final class TunerEngine: ObservableObject {
                 DispatchQueue.main.async {
                     guard let self else { return }
                     self.permissionDenied = !granted
-                    if granted { self.start() }
+                    if granted, self.shouldBeRunning { self.start() }
                 }
             }
             return false

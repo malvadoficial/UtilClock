@@ -30,6 +30,7 @@ Esta aplicación se ha desarrollado utilizando **Codex de OpenAI** y está pensa
   - Reordenar modos
   - Color del display
   - Ajustes de tamaño para juegos
+  - Recordar pantalla de inicio y opción para olvidar selección guardada
 
 ## Capturas
 
@@ -72,7 +73,7 @@ Guía rápida de release: `docs/RELEASE.md`.
 ### 1) Commit, tag y push
 
 ```bash
-VERSION="v1.1.0"
+VERSION="v1.1.1"
 
 git add .
 git commit -m "Release ${VERSION}"
@@ -108,7 +109,7 @@ codesign --force --deep --options runtime --timestamp \
 ### 3) DMG + notarización + staple
 
 ```bash
-VERSION="v1.1.0"
+VERSION="v1.1.1"
 ROOT="$(pwd)"
 OUT="$ROOT/ReleaseBuild"
 DIST="$OUT/dist"
@@ -132,7 +133,7 @@ spctl -a -vvv --type open "$DMG_NOTARY"
 ### 4) Crear release en GitHub CLI
 
 ```bash
-VERSION="v1.1.0"
+VERSION="v1.1.1"
 
 gh release create "$VERSION" \
   "ReleaseBuild/dist/UtilClock-${VERSION}-macOS-notary.dmg" \
@@ -144,4 +145,5 @@ gh release create "$VERSION" \
 ## Notas
 
 - La app usa entrada de audio para afinador/detección de acordes.
+- La captura de audio solo está activa en modos que la necesitan (afinador/detección de acordes).
 - Algunas funciones pueden requerir permisos del sistema (micrófono, etc.).

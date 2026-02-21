@@ -20,6 +20,7 @@ struct ContentView: View {
     #if os(macOS)
     private let gameLoopIntervalMs = 16
     private let gameLoopLeewayMs = 4
+    private let startupDisplaySelectionKey = "utilclock.startup.selectedDisplayID"
     #endif
 
     #if os(macOS)
@@ -1567,6 +1568,7 @@ struct ContentView: View {
             refreshSystemAudioState(triggerOnMuteTransition: false)
             startHousekeepingTimer()
             refreshAvailableDisplays()
+            applySavedStartupDisplaySelectionIfNeeded()
             if utilityMode == .tuner || utilityMode == .chordDetect {
                 tunerEngine.refreshInputs()
                 tunerEngine.start()
@@ -2462,6 +2464,28 @@ struct ContentView: View {
                                 .buttonStyle(.plain)
                             }
                         }
+
+                        Divider()
+                            .background(phosphorDim.opacity(0.4))
+                            .padding(.vertical, 6)
+
+                        Text("Pantalla guardada al iniciar: \(savedStartupDisplayDescription)")
+                            .font(.system(size: 13, weight: .regular, design: .monospaced))
+                            .foregroundStyle(phosphorDim)
+
+                        Button(action: forgetSavedStartupDisplaySelection) {
+                            Text("Olvidar pantalla seleccionada al iniciar")
+                                .font(.system(size: 14, weight: .semibold, design: .monospaced))
+                                .foregroundStyle(phosphorColor)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(Color.black.opacity(0.45))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                        .stroke(phosphorColor.opacity(0.55), lineWidth: 1)
+                                )
+                        }
+                        .buttonStyle(.plain)
 
                         Divider()
                             .background(phosphorDim.opacity(0.4))
@@ -5463,6 +5487,53 @@ struct ContentView: View {
         }
     }
 
+    private func savedStartupDisplayID() -> UInt32? {
+        let defaults = UserDefaults.standard
+        guard let value = defaults.object(forKey: startupDisplaySelectionKey) as? NSNumber else { return nil }
+        return value.uint32Value
+    }
+
+    private var savedStartupDisplayDescription: String {
+        guard let savedID = savedStartupDisplayID() else {
+            return "ninguna"
+        }
+        if let target = availableDisplayTargets.first(where: { $0.id == savedID }) {
+            return "\(target.name) (\(target.resolutionText))"
+        }
+        return "id \(savedID)"
+    }
+
+    private func applySavedStartupDisplaySelectionIfNeeded(remainingRetries: Int = 12) {
+        guard let savedScreenID = savedStartupDisplayID() else {
+            showStartupScreenPicker = true
+            return
+        }
+        guard availableDisplayTargets.contains(where: { $0.id == savedScreenID }) else {
+            showStartupScreenPicker = true
+            return
+        }
+
+        showStartupScreenPicker = false
+
+        guard hostWindow != nil else {
+            guard remainingRetries > 0 else {
+                showStartupScreenPicker = true
+                return
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                applySavedStartupDisplaySelectionIfNeeded(remainingRetries: remainingRetries - 1)
+            }
+            return
+        }
+
+        moveToDisplayAndEnterFullscreen(savedScreenID)
+    }
+
+    private func forgetSavedStartupDisplaySelection() {
+        UserDefaults.standard.removeObject(forKey: startupDisplaySelectionKey)
+        refreshAvailableDisplays()
+    }
+
     private func screenID(for screen: NSScreen) -> UInt32? {
         (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value
     }
@@ -5475,6 +5546,7 @@ struct ContentView: View {
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         showStartupScreenPicker = false
+        UserDefaults.standard.set(Int(targetScreenID), forKey: startupDisplaySelectionKey)
         ensureFullscreen(window: window, remainingRetries: 8)
     }
 
