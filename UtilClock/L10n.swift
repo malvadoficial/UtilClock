@@ -51,6 +51,14 @@ enum L10n {
         text(es: "despierto", en: "awake")
     }
 
+    static var modeStopwatch: String {
+        text(es: "cronometro", en: "stopwatch")
+    }
+
+    static var stopwatchPrecountdownShort: String {
+        text(es: "pre", en: "pre")
+    }
+
     static var modeCountdown: String {
         text(es: "cuenta atras", en: "countdown")
     }

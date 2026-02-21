@@ -35,6 +35,7 @@ struct ContentView: View {
         case clock
         case worldClock
         case uptime
+        case stopwatch
         case countdown
         case alarm
 
@@ -43,6 +44,7 @@ struct ContentView: View {
             case .clock: return "clock"
             case .worldClock: return "worldClock"
             case .uptime: return "uptime"
+            case .stopwatch: return "stopwatch"
             case .countdown: return "countdown"
             case .alarm: return "alarm"
             }
@@ -52,7 +54,8 @@ struct ContentView: View {
             switch self {
             case .clock: return .worldClock
             case .worldClock: return .uptime
-            case .uptime: return .countdown
+            case .uptime: return .stopwatch
+            case .stopwatch: return .countdown
             case .countdown: return .alarm
             case .alarm: return .clock
             }
@@ -63,7 +66,8 @@ struct ContentView: View {
             case .clock: return .alarm
             case .worldClock: return .clock
             case .uptime: return .worldClock
-            case .countdown: return .uptime
+            case .stopwatch: return .uptime
+            case .countdown: return .stopwatch
             case .alarm: return .countdown
             }
         }
@@ -369,6 +373,13 @@ struct ContentView: View {
     @State private var countdownInitialSeconds = 0
     @State private var countdownRemainingSeconds = 0
     @State private var countdownRunning = false
+    @State private var stopwatchRunning = false
+    @State private var stopwatchAccumulatedCentiseconds = 0
+    @State private var stopwatchStartDate: Date?
+    @State private var stopwatchPrestartCountdownEnabled = false
+    @State private var stopwatchPrestartInProgress = false
+    @State private var stopwatchPrestartDisplayValue: Int?
+    @State private var stopwatchPrestartTask: Task<Void, Never>?
     @State private var alarmSetHours = 0
     @State private var alarmSetMinutes = 0
     @State private var alarmEnabled = false
@@ -620,7 +631,57 @@ struct ContentView: View {
                     } else {
                     VStack(spacing: 0) {
                     VStack(spacing: 2) {
-                        if topMode == .countdown {
+                        if topMode == .stopwatch {
+                            TimelineView(.periodic(from: .now, by: 0.01)) { context in
+                                let stopwatchDisplay = stopwatchDisplayValues(at: context.date)
+                                HStack(alignment: .center, spacing: 16) {
+                                    HStack(alignment: .lastTextBaseline, spacing: 8) {
+                                        Text(String(format: "%02d", stopwatchDisplay.minutes))
+                                            .font(displayFont(size: mainClockSize, weight: .bold))
+                                            .monospacedDigit()
+                                            .shadow(color: phosphorColor.opacity(0.8), radius: 8)
+
+                                        Text(":")
+                                            .font(displayFont(size: mainClockSize, weight: .bold))
+                                            .monospacedDigit()
+                                            .shadow(color: phosphorColor.opacity(0.8), radius: 8)
+                                            .opacity(timeSeparatorOpacity)
+
+                                        Text(String(format: "%02d", stopwatchDisplay.seconds))
+                                            .font(displayFont(size: mainClockSize, weight: .bold))
+                                            .monospacedDigit()
+                                            .shadow(color: phosphorColor.opacity(0.8), radius: 8)
+
+                                        Text(String(format: "%02d", stopwatchDisplay.centiseconds))
+                                            .font(displayFont(size: secondsSize, weight: .bold))
+                                            .monospacedDigit()
+                                            .shadow(color: phosphorColor.opacity(0.7), radius: 6)
+                                    }
+                                    .foregroundStyle(phosphorColor)
+
+                                    VStack(spacing: 14) {
+                                        Button(action: {
+                                            stopwatchPrestartCountdownEnabled.toggle()
+                                        }) {
+                                            Text(stopwatchPreButtonTitle)
+                                                .font(.system(size: max(13, dateSize * 0.88), weight: .semibold, design: .monospaced))
+                                                .foregroundStyle(stopwatchPrestartCountdownEnabled ? phosphorColor : phosphorDim)
+                                                .padding(.horizontal, 12)
+                                                .padding(.vertical, 6)
+                                                .overlay(
+                                                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                                        .stroke((stopwatchPrestartCountdownEnabled ? phosphorColor : phosphorDim).opacity(0.6), lineWidth: 1)
+                                                )
+                                        }
+                                        .buttonStyle(.plain)
+                                        .disabled(stopwatchRunning || stopwatchPrestartInProgress)
+                                        countdownButton(title: stopwatchPrimaryButtonTitle, size: max(22, dateSize * 1.6), action: toggleStopwatchRunState)
+                                        countdownButton(title: L10n.reset, size: max(22, dateSize * 1.6), action: resetStopwatch)
+                                    }
+                                    .padding(.leading, 10)
+                                }
+                            }
+                        } else if topMode == .countdown {
                             HStack(alignment: .center, spacing: 16) {
                                 HStack(alignment: .lastTextBaseline, spacing: 8) {
                                     Text(String(format: "%02d", countdownDisplayHours))
@@ -1409,6 +1470,17 @@ struct ContentView: View {
                     .ignoresSafeArea()
                     .allowsHitTesting(false)
                 #endif
+
+                if stopwatchPrestartInProgress, let displayValue = stopwatchPrestartDisplayValue {
+                    Text("\(displayValue)")
+                        .font(displayFont(size: min(geometry.size.width, geometry.size.height) * 0.78, weight: .bold))
+                        .foregroundStyle(Color.white)
+                        .minimumScaleFactor(0.3)
+                        .lineLimit(1)
+                        .shadow(color: Color.black.opacity(0.9), radius: 16)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                        .allowsHitTesting(false)
+                }
             }
             .overlay(alignment: .topLeading) {
                 if countdownAlarmActive == false, utilityMode != .series, isBottomFullscreen == false {
@@ -1596,6 +1668,7 @@ struct ContentView: View {
             }
         )
         .onDisappear {
+            cancelStopwatchPrestartCountdown()
             stopMetronome()
             tunerEngine.stop()
             deactivatePongMode()
@@ -1665,6 +1738,8 @@ struct ContentView: View {
             return worldClockHourMinuteText
         case .uptime:
             return uptimeText.hourMinute
+        case .stopwatch:
+            return stopwatchText.hourMinute
         case .countdown:
             return countdownText.hourMinute
         case .alarm:
@@ -1687,6 +1762,8 @@ struct ContentView: View {
         switch topMode {
         case .clock, .worldClock, .uptime:
             return true
+        case .stopwatch:
+            return stopwatchRunning
         case .countdown:
             return countdownRunning
         case .alarm:
@@ -1716,6 +1793,8 @@ struct ContentView: View {
             return L10n.modeWorldClock
         case .uptime:
             return L10n.modeAwake
+        case .stopwatch:
+            return L10n.modeStopwatch
         case .countdown:
             return L10n.modeCountdown
         case .alarm:
@@ -4930,6 +5009,8 @@ struct ContentView: View {
             return worldClockSecondsText
         case .uptime:
             return uptimeText.seconds
+        case .stopwatch:
+            return stopwatchText.seconds
         case .countdown:
             return countdownText.seconds
         case .alarm:
@@ -5010,6 +5091,22 @@ struct ContentView: View {
         )
     }
 
+    private var stopwatchText: (hourMinute: String, seconds: String) {
+        let display = stopwatchDisplayValues(at: Date())
+        return (
+            hourMinute: "\(display.minutes):" + String(format: "%02d", display.seconds),
+            seconds: String(format: "%02d", display.centiseconds)
+        )
+    }
+
+    private var stopwatchPrimaryButtonTitle: String {
+        (stopwatchRunning || stopwatchPrestartInProgress) ? L10n.stop : L10n.start
+    }
+
+    private var stopwatchPreButtonTitle: String {
+        "\(L10n.stopwatchPrecountdownShort) \(stopwatchPrestartCountdownEnabled ? "on" : "off")"
+    }
+
     private var countdownText: (hourMinute: String, seconds: String) {
         let totalSeconds = max(0, countdownDisplayTotalSeconds)
         let hours = totalSeconds / 3600
@@ -5034,6 +5131,95 @@ struct ContentView: View {
                 )
         }
         .buttonStyle(PressableCountdownButtonStyle(phosphorColor: phosphorColor))
+    }
+
+    private func startStopwatch() {
+        guard stopwatchRunning == false else { return }
+        guard stopwatchPrestartInProgress == false else { return }
+
+        if stopwatchPrestartCountdownEnabled {
+            startStopwatchPrestartCountdown()
+            return
+        }
+        beginStopwatchRun()
+    }
+
+    private func toggleStopwatchRunState() {
+        if stopwatchRunning || stopwatchPrestartInProgress {
+            stopStopwatch()
+        } else {
+            startStopwatch()
+        }
+    }
+
+    private func stopStopwatch() {
+        if stopwatchPrestartInProgress {
+            cancelStopwatchPrestartCountdown()
+            return
+        }
+        guard stopwatchRunning else { return }
+        if let startDate = stopwatchStartDate {
+            let elapsedCentiseconds = max(0, Int((Date().timeIntervalSince(startDate) * 100).rounded(.down)))
+            stopwatchAccumulatedCentiseconds += elapsedCentiseconds
+        }
+        stopwatchStartDate = nil
+        stopwatchRunning = false
+    }
+
+    private func resetStopwatch() {
+        cancelStopwatchPrestartCountdown()
+        stopwatchRunning = false
+        stopwatchAccumulatedCentiseconds = 0
+        stopwatchStartDate = nil
+    }
+
+    private func stopwatchDisplayValues(at referenceDate: Date) -> (minutes: Int, seconds: Int, centiseconds: Int) {
+        let totalCentiseconds = stopwatchDisplayTotalCentiseconds(at: referenceDate)
+        let minutes = totalCentiseconds / 6000
+        let seconds = (totalCentiseconds / 100) % 60
+        let centiseconds = totalCentiseconds % 100
+        return (minutes, seconds, centiseconds)
+    }
+
+    private func stopwatchDisplayTotalCentiseconds(at referenceDate: Date) -> Int {
+        var totalCentiseconds = stopwatchAccumulatedCentiseconds
+        if stopwatchRunning, let startDate = stopwatchStartDate {
+            totalCentiseconds += max(0, Int((referenceDate.timeIntervalSince(startDate) * 100).rounded(.down)))
+        }
+        return max(0, totalCentiseconds)
+    }
+
+    private func beginStopwatchRun() {
+        stopwatchStartDate = Date()
+        stopwatchRunning = true
+    }
+
+    private func startStopwatchPrestartCountdown() {
+        cancelStopwatchPrestartCountdown()
+        stopwatchPrestartInProgress = true
+
+        stopwatchPrestartTask = Task { @MainActor in
+            for value in stride(from: 3, through: 1, by: -1) {
+                stopwatchPrestartDisplayValue = value
+                #if os(macOS)
+                triggerFlash()
+                #endif
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                if Task.isCancelled { return }
+            }
+
+            stopwatchPrestartDisplayValue = nil
+            stopwatchPrestartTask = nil
+            stopwatchPrestartInProgress = false
+            beginStopwatchRun()
+        }
+    }
+
+    private func cancelStopwatchPrestartCountdown() {
+        stopwatchPrestartTask?.cancel()
+        stopwatchPrestartTask = nil
+        stopwatchPrestartInProgress = false
+        stopwatchPrestartDisplayValue = nil
     }
 
     private func startCountdown() {
