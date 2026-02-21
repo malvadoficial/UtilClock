@@ -22,6 +22,7 @@ struct ContentView: View {
     private let gameLoopLeewayMs = 4
     private let startupDisplaySelectionKey = "utilclock.startup.selectedDisplayID"
     #endif
+    private let preferredFullscreenKey = "utilclock.window.preferredFullscreen"
 
     #if os(macOS)
     private struct DisplayTarget: Identifiable {
@@ -386,6 +387,7 @@ struct ContentView: View {
     @State private var alarmEnabled = false
     @State private var selectedWorldCityIndex = 0
     @State private var splitFullscreenTarget: SplitFullscreenTarget = .none
+    @State private var preferredFullscreen = true
     @State private var lastTriggeredAlarmSecondKey: String?
     @State private var selectedAudioDeviceName = L10n.noAudioDevice
     @State private var cpuUsagePercent: Double = 0
@@ -419,6 +421,7 @@ struct ContentView: View {
     @State private var countdownAlarmFlashTimer: Timer?
     @State private var countdownAlarmStopWorkItem: DispatchWorkItem?
     @State private var countdownAlarmPlayer: AVAudioPlayer?
+    @State private var countdownBeepPlayer: AVAudioPlayer?
     @State private var metronomeTickPlayer: AVAudioPlayer?
     @State private var metronomeStrongTickPlayer: AVAudioPlayer?
     @State private var housekeepingTimer: Timer?
@@ -440,6 +443,7 @@ struct ContentView: View {
     @State private var seriesStatusText: String?
     @State private var seriesPlayRequestID = 0
     @State private var seriesResumeVideoURL: URL?
+    @State private var fullscreenDoubleClickMonitor: Any?
     @State private var ffmpegInstallInProgress = false
     @State private var ffmpegInstallAttempted = false
     @State private var pongFieldSizeLevel = 4
@@ -748,7 +752,7 @@ struct ContentView: View {
                                 .foregroundStyle(phosphorColor)
 
                                 VStack(spacing: 14) {
-                                    countdownButton(title: L10n.start, size: max(22, dateSize * 1.6), action: startCountdown)
+                                    countdownButton(title: countdownPrimaryButtonTitle, size: max(22, dateSize * 1.6), action: toggleCountdownRunState)
                                     countdownButton(title: L10n.stop, size: max(22, dateSize * 1.6), action: stopCountdown)
                                     countdownButton(title: L10n.reset, size: max(22, dateSize * 1.6), action: resetCountdown)
                                 }
@@ -1561,6 +1565,7 @@ struct ContentView: View {
         .onAppear {
             clearSeriesCacheOnLaunch()
             loadModeVisibilitySettings()
+            installFullscreenDoubleClickMonitorIfNeeded()
             knownVolumeIDs = Set(usbMonitor.volumes.map(\.id))
             syncAlarmToCurrentTimeIfUnset()
             refreshAudioDeviceName()
@@ -1661,14 +1666,21 @@ struct ContentView: View {
             }
 
         }
-        .onTapGesture(count: 2) {
-            hostWindow?.toggleFullScreen(nil)
-        }
         .simultaneousGesture(
             TapGesture().onEnded {
                 stopCountdownAlarmIfNeeded(restorePreviousModes: true)
             }
         )
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didEnterFullScreenNotification)) { notification in
+            guard let window = notification.object as? NSWindow, window == hostWindow else { return }
+            preferredFullscreen = true
+            saveModeVisibilitySettings()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didExitFullScreenNotification)) { notification in
+            guard let window = notification.object as? NSWindow, window == hostWindow else { return }
+            preferredFullscreen = false
+            saveModeVisibilitySettings()
+        }
         .onDisappear {
             cancelStopwatchPrestartCountdown()
             stopMetronome()
@@ -1684,6 +1696,7 @@ struct ContentView: View {
             seriesTranscodeWorkItem = nil
             removeSeriesEscapeKeyMonitor()
             releaseSeriesSecurityScope()
+            removeFullscreenDoubleClickMonitor()
             stopHousekeepingTimer()
         }
         #endif
@@ -2491,6 +2504,44 @@ struct ContentView: View {
                             .background(phosphorDim.opacity(0.4))
                             .padding(.vertical, 6)
 
+                        Text("Modo de ventana / Window mode")
+                            .font(.system(size: 20, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(phosphorDim)
+
+                        HStack(spacing: 10) {
+                            Button(action: { setPreferredFullscreen(true) }) {
+                                Text("Pantalla completa")
+                                    .font(.system(size: 14, weight: .semibold, design: .monospaced))
+                                    .foregroundStyle(phosphorColor)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 8)
+                                    .background(Color.black.opacity(preferredFullscreen ? 0.65 : 0.35))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                            .stroke(phosphorColor.opacity(preferredFullscreen ? 0.9 : 0.4), lineWidth: 1)
+                                    )
+                            }
+                            .buttonStyle(.plain)
+
+                            Button(action: { setPreferredFullscreen(false) }) {
+                                Text("Ventana")
+                                    .font(.system(size: 14, weight: .semibold, design: .monospaced))
+                                    .foregroundStyle(phosphorColor)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 8)
+                                    .background(Color.black.opacity(preferredFullscreen ? 0.35 : 0.65))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                            .stroke(phosphorColor.opacity(preferredFullscreen ? 0.4 : 0.9), lineWidth: 1)
+                                    )
+                            }
+                            .buttonStyle(.plain)
+                        }
+
+                        Divider()
+                            .background(phosphorDim.opacity(0.4))
+                            .padding(.vertical, 6)
+
                         Text("Pantalla superior / Top screen")
                             .font(.system(size: 20, weight: .semibold, design: .monospaced))
                             .foregroundStyle(phosphorDim)
@@ -2851,6 +2902,12 @@ struct ContentView: View {
             }
         }
 
+        if defaults.object(forKey: preferredFullscreenKey) != nil {
+            preferredFullscreen = defaults.bool(forKey: preferredFullscreenKey)
+        } else {
+            preferredFullscreen = true
+        }
+
         enabledUtilityModes = Set(enabledUtilityModes.filter { $0 != .series })
         utilityModeOrder = utilityModeOrder.filter { $0 != .series }
         if utilityMode == .series {
@@ -2892,6 +2949,7 @@ struct ContentView: View {
         defaults.set(utilityModeOrder.filter { $0 != .series }.map(\.key), forKey: "utilclock.utilityModeOrder")
         defaults.set(max(1, min(4, pongFieldSizeLevel)), forKey: "utilclock.pongFieldSizeLevel")
         defaults.set(max(1, min(4, snakeBoardSizeLevel)), forKey: "utilclock.snakeBoardSizeLevel")
+        defaults.set(preferredFullscreen, forKey: preferredFullscreenKey)
     }
 
     private func rotatePongFieldSize(forward: Bool) {
@@ -2988,7 +3046,7 @@ struct ContentView: View {
                 VStack(spacing: 10) {
                     ForEach(availableDisplayTargets) { target in
                         Button(action: {
-                            moveToDisplayAndEnterFullscreen(target.id)
+                            moveToDisplayAndApplyPresentation(target.id)
                         }) {
                             HStack {
                                 VStack(alignment: .leading, spacing: 4) {
@@ -5131,6 +5189,10 @@ struct ContentView: View {
         "\(L10n.stopwatchPrecountdownShort) \(stopwatchPrestartCountdownEnabled ? "on" : "off")"
     }
 
+    private var countdownPrimaryButtonTitle: String {
+        countdownRunning ? "pausa" : L10n.start
+    }
+
     private var countdownText: (hourMinute: String, seconds: String) {
         let totalSeconds = max(0, countdownDisplayTotalSeconds)
         let hours = totalSeconds / 3600
@@ -5258,11 +5320,15 @@ struct ContentView: View {
         }
     }
 
-    private func stopCountdown() {
-        countdownRunning = false
+    private func toggleCountdownRunState() {
+        if countdownRunning {
+            countdownRunning = false
+        } else {
+            startCountdown()
+        }
     }
 
-    private func resetCountdown() {
+    private func stopCountdown() {
         countdownRunning = false
         if countdownInitialSeconds == 0 {
             countdownInitialSeconds = countdownConfiguredTotalSeconds
@@ -5270,11 +5336,25 @@ struct ContentView: View {
         countdownRemainingSeconds = countdownInitialSeconds
     }
 
+    private func resetCountdown() {
+        countdownRunning = false
+        countdownSetHours = 0
+        countdownSetMinutes = 0
+        countdownSetSeconds = 0
+        countdownInitialSeconds = 0
+        countdownRemainingSeconds = 0
+    }
+
     private func tickCountdown() {
         guard topMode == .countdown, countdownRunning else { return }
         if countdownRemainingSeconds > 0 {
             countdownRemainingSeconds -= 1
         }
+        #if os(macOS)
+        if countdownRemainingSeconds > 0, countdownRemainingSeconds <= 3 {
+            playCountdownFinalSecondsBeep()
+        }
+        #endif
         if countdownRemainingSeconds <= 0 {
             countdownRemainingSeconds = 0
             countdownRunning = false
@@ -5284,6 +5364,41 @@ struct ContentView: View {
             #endif
         }
     }
+
+    #if os(macOS)
+    private func playCountdownFinalSecondsBeep() {
+        if countdownBeepPlayer == nil {
+            prepareCountdownBeepPlayerIfNeeded()
+        }
+
+        if let player = countdownBeepPlayer {
+            player.currentTime = 0
+            player.play()
+        } else {
+            NSSound.beep()
+        }
+    }
+
+    private func prepareCountdownBeepPlayerIfNeeded() {
+        let bundle = Bundle.main
+        let beepURL = bundle.url(forResource: "tic", withExtension: "mp3", subdirectory: "Assets")
+            ?? bundle.url(forResource: "tic", withExtension: "mp3")
+
+        guard let beepURL else {
+            countdownBeepPlayer = nil
+            return
+        }
+
+        do {
+            let player = try AVAudioPlayer(contentsOf: beepURL)
+            player.numberOfLoops = 0
+            player.prepareToPlay()
+            countdownBeepPlayer = player
+        } catch {
+            countdownBeepPlayer = nil
+        }
+    }
+    #endif
 
     private func incrementCountdownHour() {
         guard countdownRunning == false else { return }
@@ -5526,7 +5641,7 @@ struct ContentView: View {
             return
         }
 
-        moveToDisplayAndEnterFullscreen(savedScreenID)
+        moveToDisplayAndApplyPresentation(savedScreenID)
     }
 
     private func forgetSavedStartupDisplaySelection() {
@@ -5538,7 +5653,7 @@ struct ContentView: View {
         (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value
     }
 
-    private func moveToDisplayAndEnterFullscreen(_ targetScreenID: UInt32) {
+    private func moveToDisplayAndApplyPresentation(_ targetScreenID: UInt32) {
         guard let window = hostWindow else { return }
         guard let targetScreen = NSScreen.screens.first(where: { screenID(for: $0) == targetScreenID }) else { return }
 
@@ -5547,7 +5662,7 @@ struct ContentView: View {
         NSApp.activate(ignoringOtherApps: true)
         showStartupScreenPicker = false
         UserDefaults.standard.set(Int(targetScreenID), forKey: startupDisplaySelectionKey)
-        ensureFullscreen(window: window, remainingRetries: 8)
+        applyWindowPresentation(window: window, fullscreen: preferredFullscreen)
     }
 
     private func ensureFullscreen(window: NSWindow, remainingRetries: Int) {
@@ -5558,6 +5673,31 @@ struct ContentView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
             ensureFullscreen(window: window, remainingRetries: remainingRetries - 1)
         }
+    }
+
+    private func ensureWindowed(window: NSWindow, remainingRetries: Int) {
+        guard remainingRetries > 0 else { return }
+        if window.styleMask.contains(.fullScreen) == false { return }
+
+        window.toggleFullScreen(nil)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+            ensureWindowed(window: window, remainingRetries: remainingRetries - 1)
+        }
+    }
+
+    private func applyWindowPresentation(window: NSWindow, fullscreen: Bool) {
+        if fullscreen {
+            ensureFullscreen(window: window, remainingRetries: 8)
+        } else {
+            ensureWindowed(window: window, remainingRetries: 8)
+        }
+    }
+
+    private func setPreferredFullscreen(_ fullscreen: Bool) {
+        preferredFullscreen = fullscreen
+        saveModeVisibilitySettings()
+        guard let window = hostWindow else { return }
+        applyWindowPresentation(window: window, fullscreen: fullscreen)
     }
 
     private func refreshAudioDeviceName() {
@@ -6626,6 +6766,22 @@ struct ContentView: View {
         }
         seriesResumeVideoURL = nil
         playRandomSeriesVideo()
+    }
+
+    private func installFullscreenDoubleClickMonitorIfNeeded() {
+        guard fullscreenDoubleClickMonitor == nil else { return }
+        fullscreenDoubleClickMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { event in
+            guard event.clickCount > 1 else { return event }
+            guard let eventWindow = event.window, let hostWindow else { return event }
+            guard eventWindow == hostWindow else { return event }
+            return nil
+        }
+    }
+
+    private func removeFullscreenDoubleClickMonitor() {
+        guard let monitor = fullscreenDoubleClickMonitor else { return }
+        NSEvent.removeMonitor(monitor)
+        fullscreenDoubleClickMonitor = nil
     }
 
     private func installSeriesEscapeKeyMonitorIfNeeded() {

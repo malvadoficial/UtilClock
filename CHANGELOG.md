@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.1.2 - 2026-02-22
+
+- Fixed accidental fullscreen toggles caused by fast/double click interactions.
+- Added settings toggle to switch between fullscreen/window mode and remember the last selected mode on launch.
+- Countdown controls updated:
+  - Main button now toggles `start/pausa`.
+  - `stop` now returns to the originally introduced countdown value.
+  - `reset` now clears countdown to `00:00:00`.
+- Added audible beeps for the final three countdown seconds (`3`, `2`, `1`).
+- README now documents installation via downloadable DMG from GitHub Releases.
+
 ## v1.1.1 - 2026-02-21
 
 - Startup display selection is now remembered between launches.

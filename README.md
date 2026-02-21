@@ -60,6 +60,15 @@ Esta aplicación se ha desarrollado utilizando **Codex de OpenAI** y está pensa
 2. Seleccionar el esquema `UtilClock`.
 3. Ejecutar con `Run` sobre `My Mac`.
 
+## Instalar desde DMG
+
+También se puede usar sin Xcode bajando el instalador `.dmg` desde GitHub Releases:
+
+1. Descargar el `.dmg` de la versión más reciente en [Releases](https://github.com/malvadoficial/UtilClock/releases).
+2. Abrir el `.dmg`.
+3. Arrastrar `UtilClock.app` a `Applications`.
+4. Abrir la app desde `Applications`.
+
 ## Build desde terminal
 
 ```bash
