@@ -680,6 +680,7 @@ struct ContentView: View {
     @State var froggerRows = 12
     @State var froggerPlayerCol = 5
     @State var froggerPlayerRow = 11
+    @State var froggerCarryAccumulator: CGFloat = 0
     @State var froggerObstacles: [FroggerObstacle] = []
     @State var froggerTimer: DispatchSourceTimer?
     @State var froggerKeyboardMonitor: Any?
