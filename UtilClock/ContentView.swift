@@ -13,6 +13,7 @@ import Darwin
 import AVFoundation
 import AVKit
 import QuartzCore
+import ServiceManagement
 import UniformTypeIdentifiers
 #endif
 
@@ -23,6 +24,7 @@ struct ContentView: View {
     private let startupDisplaySelectionKey = "utilclock.startup.selectedDisplayID"
     #endif
     private let preferredFullscreenKey = "utilclock.window.preferredFullscreen"
+    private let menuBarOnlyModeKey = "utilclock.presentation.menuBarOnly"
 
     #if os(macOS)
     private struct DisplayTarget: Identifiable {
@@ -388,6 +390,9 @@ struct ContentView: View {
     @State private var selectedWorldCityIndex = 0
     @State private var splitFullscreenTarget: SplitFullscreenTarget = .none
     @State private var preferredFullscreen = true
+    @State private var menuBarOnlyMode = false
+    @State private var launchAtLoginEnabled = false
+    @State private var launchAtLoginErrorText: String?
     @State private var lastTriggeredAlarmSecondKey: String?
     @State private var selectedAudioDeviceName = L10n.noAudioDevice
     @State private var cpuUsagePercent: Double = 0
@@ -1565,6 +1570,7 @@ struct ContentView: View {
         .onAppear {
             clearSeriesCacheOnLaunch()
             loadModeVisibilitySettings()
+            refreshLaunchAtLoginStatus()
             installFullscreenDoubleClickMonitorIfNeeded()
             knownVolumeIDs = Set(usbMonitor.volumes.map(\.id))
             syncAlarmToCurrentTimeIfUnset()
@@ -2542,6 +2548,88 @@ struct ContentView: View {
                             .background(phosphorDim.opacity(0.4))
                             .padding(.vertical, 6)
 
+                        Text("Presentacion app / App presentation")
+                            .font(.system(size: 20, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(phosphorDim)
+
+                        HStack(spacing: 10) {
+                            Button(action: { setMenuBarOnlyMode(false) }) {
+                                Text("Dock")
+                                    .font(.system(size: 14, weight: .semibold, design: .monospaced))
+                                    .foregroundStyle(phosphorColor)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 8)
+                                    .background(Color.black.opacity(menuBarOnlyMode ? 0.35 : 0.65))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                            .stroke(phosphorColor.opacity(menuBarOnlyMode ? 0.4 : 0.9), lineWidth: 1)
+                                    )
+                            }
+                            .buttonStyle(.plain)
+
+                            Button(action: { setMenuBarOnlyMode(true) }) {
+                                Text("Barra de menús")
+                                    .font(.system(size: 14, weight: .semibold, design: .monospaced))
+                                    .foregroundStyle(phosphorColor)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 8)
+                                    .background(Color.black.opacity(menuBarOnlyMode ? 0.65 : 0.35))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                            .stroke(phosphorColor.opacity(menuBarOnlyMode ? 0.9 : 0.4), lineWidth: 1)
+                                    )
+                            }
+                            .buttonStyle(.plain)
+                        }
+
+                        Divider()
+                            .background(phosphorDim.opacity(0.4))
+                            .padding(.vertical, 6)
+
+                        Text("Inicio de sesion / Login")
+                            .font(.system(size: 20, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(phosphorDim)
+
+                        HStack(spacing: 10) {
+                            Button(action: { setLaunchAtLoginEnabled(true) }) {
+                                Text("Auto-inicio ON")
+                                    .font(.system(size: 14, weight: .semibold, design: .monospaced))
+                                    .foregroundStyle(phosphorColor)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 8)
+                                    .background(Color.black.opacity(launchAtLoginEnabled ? 0.65 : 0.35))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                            .stroke(phosphorColor.opacity(launchAtLoginEnabled ? 0.9 : 0.4), lineWidth: 1)
+                                    )
+                            }
+                            .buttonStyle(.plain)
+
+                            Button(action: { setLaunchAtLoginEnabled(false) }) {
+                                Text("Auto-inicio OFF")
+                                    .font(.system(size: 14, weight: .semibold, design: .monospaced))
+                                    .foregroundStyle(phosphorColor)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 8)
+                                    .background(Color.black.opacity(launchAtLoginEnabled ? 0.35 : 0.65))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                            .stroke(phosphorColor.opacity(launchAtLoginEnabled ? 0.4 : 0.9), lineWidth: 1)
+                                    )
+                            }
+                            .buttonStyle(.plain)
+                        }
+
+                        if let launchAtLoginErrorText, launchAtLoginErrorText.isEmpty == false {
+                            Text(launchAtLoginErrorText)
+                                .font(.system(size: 12, weight: .regular, design: .monospaced))
+                                .foregroundStyle(Color(red: 1.0, green: 0.72, blue: 0.66))
+                        }
+
+                        Divider()
+                            .background(phosphorDim.opacity(0.4))
+                            .padding(.vertical, 6)
+
                         Text("Pantalla superior / Top screen")
                             .font(.system(size: 20, weight: .semibold, design: .monospaced))
                             .foregroundStyle(phosphorDim)
@@ -2908,6 +2996,12 @@ struct ContentView: View {
             preferredFullscreen = true
         }
 
+        if defaults.object(forKey: menuBarOnlyModeKey) != nil {
+            menuBarOnlyMode = defaults.bool(forKey: menuBarOnlyModeKey)
+        } else {
+            menuBarOnlyMode = false
+        }
+
         enabledUtilityModes = Set(enabledUtilityModes.filter { $0 != .series })
         utilityModeOrder = utilityModeOrder.filter { $0 != .series }
         if utilityMode == .series {
@@ -2950,6 +3044,7 @@ struct ContentView: View {
         defaults.set(max(1, min(4, pongFieldSizeLevel)), forKey: "utilclock.pongFieldSizeLevel")
         defaults.set(max(1, min(4, snakeBoardSizeLevel)), forKey: "utilclock.snakeBoardSizeLevel")
         defaults.set(preferredFullscreen, forKey: preferredFullscreenKey)
+        defaults.set(menuBarOnlyMode, forKey: menuBarOnlyModeKey)
     }
 
     private func rotatePongFieldSize(forward: Bool) {
@@ -5698,6 +5793,29 @@ struct ContentView: View {
         saveModeVisibilitySettings()
         guard let window = hostWindow else { return }
         applyWindowPresentation(window: window, fullscreen: fullscreen)
+    }
+
+    private func setMenuBarOnlyMode(_ enabled: Bool) {
+        menuBarOnlyMode = enabled
+        saveModeVisibilitySettings()
+    }
+
+    private func refreshLaunchAtLoginStatus() {
+        launchAtLoginEnabled = (SMAppService.mainApp.status == .enabled)
+    }
+
+    private func setLaunchAtLoginEnabled(_ enabled: Bool) {
+        do {
+            if enabled {
+                try SMAppService.mainApp.register()
+            } else {
+                try SMAppService.mainApp.unregister()
+            }
+            launchAtLoginErrorText = nil
+        } catch {
+            launchAtLoginErrorText = "error auto-inicio: \(error.localizedDescription)"
+        }
+        refreshLaunchAtLoginStatus()
     }
 
     private func refreshAudioDeviceName() {

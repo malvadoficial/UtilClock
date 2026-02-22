@@ -31,6 +31,8 @@ Esta aplicación se ha desarrollado utilizando **Codex de OpenAI** y está pensa
   - Color del display
   - Ajustes de tamaño para juegos
   - Recordar pantalla de inicio y opción para olvidar selección guardada
+  - Elegir presentación de la app: `Dock` o `Barra de menús`
+  - Auto-inicio al iniciar sesión (`ON/OFF`)
 
 ## Capturas
 
@@ -82,7 +84,7 @@ Guía rápida de release: `docs/RELEASE.md`.
 ### 1) Commit, tag y push
 
 ```bash
-VERSION="v1.1.1"
+VERSION="v1.1.3"
 
 git add .
 git commit -m "Release ${VERSION}"
@@ -118,7 +120,7 @@ codesign --force --deep --options runtime --timestamp \
 ### 3) DMG + notarización + staple
 
 ```bash
-VERSION="v1.1.1"
+VERSION="v1.1.3"
 ROOT="$(pwd)"
 OUT="$ROOT/ReleaseBuild"
 DIST="$OUT/dist"
@@ -142,7 +144,7 @@ spctl -a -vvv --type open "$DMG_NOTARY"
 ### 4) Crear release en GitHub CLI
 
 ```bash
-VERSION="v1.1.1"
+VERSION="v1.1.3"
 
 gh release create "$VERSION" \
   "ReleaseBuild/dist/UtilClock-${VERSION}-macOS-notary.dmg" \

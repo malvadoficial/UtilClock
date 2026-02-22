@@ -211,6 +211,30 @@ enum L10n {
         text(es: "salir", en: "quit")
     }
 
+    static var menuChangeMonitor: String {
+        text(es: "cambiar monitor", en: "change monitor")
+    }
+
+    static var menuEnableFullscreen: String {
+        text(es: "activar pantalla completa", en: "enable fullscreen")
+    }
+
+    static var menuDisableFullscreen: String {
+        text(es: "desactivar pantalla completa", en: "disable fullscreen")
+    }
+
+    static var menuLaunchAtLoginOn: String {
+        text(es: "auto-inicio on", en: "launch at login on")
+    }
+
+    static var menuLaunchAtLoginOff: String {
+        text(es: "auto-inicio off", en: "launch at login off")
+    }
+
+    static var menuQuit: String {
+        text(es: "Salir", en: "Quit")
+    }
+
     static var systemVolume: String {
         text(es: "volumen del sistema", en: "system volume")
     }

@@ -12,12 +12,16 @@ import UIKit
 #endif
 #if os(macOS)
 import AppKit
+import ServiceManagement
 #endif
 
 @main
 struct UtilClockApp: App {
     #if os(macOS)
     @AppStorage("alwaysOnTop") private var alwaysOnTop = false
+    @AppStorage("utilclock.presentation.menuBarOnly") private var menuBarOnlyMode = false
+    @State private var statusBarController = StatusBarController()
+    @State private var pendingAccessoryActivation = false
     #endif
 
     init() {
@@ -29,6 +33,24 @@ struct UtilClockApp: App {
             ContentView()
                 #if os(macOS)
                 .background(BorderlessWindowConfigurator(alwaysOnTop: alwaysOnTop))
+                .onAppear {
+                    applyPresentationMode()
+                }
+                .onReceive(NotificationCenter.default.publisher(for: NSWindow.didEnterFullScreenNotification)) { _ in
+                    applyPresentationMode()
+                }
+                .onReceive(NotificationCenter.default.publisher(for: NSWindow.didExitFullScreenNotification)) { _ in
+                    applyPresentationMode()
+                }
+                .onChange(of: menuBarOnlyMode) { _, isMenuBarOnly in
+                    applyPresentationMode()
+                    if isMenuBarOnly == false {
+                        showMainWindow()
+                    }
+                }
+                .onChange(of: alwaysOnTop) { _, _ in
+                    applyPresentationMode()
+                }
                 #endif
                 #if os(iOS) || os(tvOS)
                 .onAppear {
@@ -61,6 +83,230 @@ struct UtilClockApp: App {
 }
 
 #if os(macOS)
+private extension UtilClockApp {
+    func applyPresentationMode() {
+        let targetWindow = NSApp.keyWindow ?? NSApp.mainWindow ?? NSApp.windows.first
+        let isFullscreen = targetWindow?.styleMask.contains(.fullScreen) ?? false
+
+        let targetPolicy: NSApplication.ActivationPolicy
+        if menuBarOnlyMode {
+            if isFullscreen {
+                // Defer accessory activation until windowed mode to avoid breaking fullscreen.
+                targetPolicy = .regular
+                pendingAccessoryActivation = true
+            } else {
+                targetPolicy = .accessory
+                pendingAccessoryActivation = false
+            }
+        } else {
+            targetPolicy = .regular
+            pendingAccessoryActivation = false
+        }
+
+        if NSApp.activationPolicy() != targetPolicy {
+            NSApp.setActivationPolicy(targetPolicy)
+        }
+
+        if pendingAccessoryActivation, isFullscreen == false, menuBarOnlyMode {
+            pendingAccessoryActivation = false
+            if NSApp.activationPolicy() != .accessory {
+                NSApp.setActivationPolicy(.accessory)
+            }
+        }
+
+        statusBarController.update(
+            isVisible: menuBarOnlyMode,
+            launchAtLoginEnabled: isLaunchAtLoginEnabled(),
+            toggleFullscreen: { toggleFullscreen() },
+            moveToScreen: { screenID in moveMainWindowToScreen(screenID) },
+            toggleLaunchAtLogin: { enabled in setLaunchAtLoginEnabled(enabled) }
+        )
+    }
+
+    func showMainWindow() {
+        let targetWindow = NSApp.keyWindow ?? NSApp.mainWindow ?? NSApp.windows.first
+        targetWindow?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    func toggleFullscreen() {
+        let targetWindow = NSApp.keyWindow ?? NSApp.mainWindow ?? NSApp.windows.first
+        targetWindow?.toggleFullScreen(nil)
+    }
+
+    func moveMainWindowToScreen(_ targetScreenID: UInt32) {
+        guard let window = NSApp.keyWindow ?? NSApp.mainWindow ?? NSApp.windows.first else { return }
+        guard let targetScreen = NSScreen.screens.first(where: { screenID(for: $0) == targetScreenID }) else { return }
+
+        let wasFullscreen = window.styleMask.contains(.fullScreen)
+        if wasFullscreen {
+            window.toggleFullScreen(nil)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                window.setFrame(targetScreen.frame, display: true, animate: false)
+                window.makeKeyAndOrderFront(nil)
+                NSApp.activate(ignoringOtherApps: true)
+                window.toggleFullScreen(nil)
+            }
+        } else {
+            window.setFrame(targetScreen.frame, display: true, animate: false)
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+        }
+    }
+
+    func screenID(for screen: NSScreen) -> UInt32? {
+        (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value
+    }
+
+    func isLaunchAtLoginEnabled() -> Bool {
+        SMAppService.mainApp.status == .enabled
+    }
+
+    func setLaunchAtLoginEnabled(_ enabled: Bool) {
+        do {
+            if enabled {
+                try SMAppService.mainApp.register()
+            } else {
+                try SMAppService.mainApp.unregister()
+            }
+        } catch {
+            // Keep menu responsive even if system registration fails.
+        }
+        applyPresentationMode()
+    }
+}
+
+private final class StatusBarController {
+    private var statusItem: NSStatusItem?
+    private var toggleFullscreenAction: (() -> Void)?
+    private var moveToScreenAction: ((UInt32) -> Void)?
+    private var toggleLaunchAtLoginAction: ((Bool) -> Void)?
+
+    func update(
+        isVisible: Bool,
+        launchAtLoginEnabled: Bool,
+        toggleFullscreen: @escaping () -> Void,
+        moveToScreen: @escaping (UInt32) -> Void,
+        toggleLaunchAtLogin: @escaping (Bool) -> Void
+    ) {
+        toggleFullscreenAction = toggleFullscreen
+        moveToScreenAction = moveToScreen
+        toggleLaunchAtLoginAction = toggleLaunchAtLogin
+
+        if isVisible {
+            if statusItem == nil {
+                statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+                statusItem?.button?.image = makeStatusBarImage()
+                statusItem?.button?.imagePosition = .imageOnly
+            }
+            statusItem?.menu = buildMenu(launchAtLoginEnabled: launchAtLoginEnabled)
+        } else if let item = statusItem {
+            NSStatusBar.system.removeStatusItem(item)
+            statusItem = nil
+        }
+    }
+
+    private func buildMenu(launchAtLoginEnabled: Bool) -> NSMenu {
+        let menu = NSMenu()
+
+        let monitorItem = NSMenuItem(title: L10n.menuChangeMonitor, action: nil, keyEquivalent: "")
+        monitorItem.submenu = buildScreensSubmenu()
+        menu.addItem(monitorItem)
+
+        let fullscreenItem = NSMenuItem(title: fullscreenMenuTitle(), action: #selector(toggleFullScreen), keyEquivalent: "")
+        fullscreenItem.target = self
+        menu.addItem(fullscreenItem)
+
+        let launchAtLoginTitle = launchAtLoginEnabled
+            ? L10n.menuLaunchAtLoginOff
+            : L10n.menuLaunchAtLoginOn
+        let launchAtLoginItem = NSMenuItem(title: launchAtLoginTitle, action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
+        launchAtLoginItem.target = self
+        launchAtLoginItem.state = launchAtLoginEnabled ? .on : .off
+        menu.addItem(launchAtLoginItem)
+
+        menu.addItem(.separator())
+
+        let quitItem = NSMenuItem(title: L10n.menuQuit, action: #selector(quitApp), keyEquivalent: "")
+        quitItem.target = self
+        quitItem.image = NSImage(
+            systemSymbolName: "rectangle.portrait.and.arrow.right",
+            accessibilityDescription: L10n.menuQuit
+        )
+        menu.addItem(quitItem)
+
+        return menu
+    }
+
+    private func buildScreensSubmenu() -> NSMenu {
+        let submenu = NSMenu()
+        let currentScreenID = currentWindowScreenID()
+
+        for screen in NSScreen.screens {
+            guard let id = (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value else { continue }
+            let frame = screen.frame
+            let title = "\(screen.localizedName) (\(Int(frame.width))x\(Int(frame.height)))"
+            let item = NSMenuItem(title: title, action: #selector(selectScreen(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = NSNumber(value: id)
+            item.state = (currentScreenID == id) ? .on : .off
+            submenu.addItem(item)
+        }
+
+        return submenu
+    }
+
+    private func currentWindowScreenID() -> UInt32? {
+        let targetWindow = NSApp.keyWindow ?? NSApp.mainWindow ?? NSApp.windows.first
+        guard let screen = targetWindow?.screen else { return nil }
+        return (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value
+    }
+
+    private func makeStatusBarImage() -> NSImage? {
+        let preferred = NSImage(
+            systemSymbolName: "timer.circle.fill",
+            accessibilityDescription: "UtilClock"
+        )
+        let fallback = NSImage(
+            systemSymbolName: "clock.fill",
+            accessibilityDescription: "UtilClock"
+        )
+        let image = preferred ?? fallback
+        image?.isTemplate = true
+        return image
+    }
+
+    private func fullscreenMenuTitle() -> String {
+        let targetWindow = NSApp.keyWindow ?? NSApp.mainWindow ?? NSApp.windows.first
+        let isFullscreen = targetWindow?.styleMask.contains(.fullScreen) ?? false
+        return isFullscreen
+            ? L10n.menuDisableFullscreen
+            : L10n.menuEnableFullscreen
+    }
+
+    @objc
+    private func toggleFullScreen() {
+        toggleFullscreenAction?()
+    }
+
+    @objc
+    private func selectScreen(_ sender: NSMenuItem) {
+        guard let idValue = sender.representedObject as? NSNumber else { return }
+        moveToScreenAction?(idValue.uint32Value)
+    }
+
+    @objc
+    private func toggleLaunchAtLogin() {
+        let currentlyEnabled = (SMAppService.mainApp.status == .enabled)
+        toggleLaunchAtLoginAction?(currentlyEnabled == false)
+    }
+
+    @objc
+    private func quitApp() {
+        NSApp.terminate(nil)
+    }
+}
+
 private struct BorderlessWindowConfigurator: NSViewRepresentable {
     let alwaysOnTop: Bool
 
