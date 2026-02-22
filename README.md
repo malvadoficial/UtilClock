@@ -26,15 +26,24 @@ Esta aplicación se ha desarrollado utilizando **Codex de OpenAI** y está pensa
   - Juegos (launcher multi-fila con scroll):
     - Pong, Arkanoid, Snake, Missile Command, Jump n' run (dino),
     - Tetris, Space Invaders, Asteroids, Tron, Pac-Man, Frogger, Artillery
-- Configuración integrada:
+  - Configuración integrada:
   - Activar/desactivar modos
   - Reordenar modos
   - Color del display
-  - Ajustes de tamaño para juegos
+  - Ajustes de tamaño para juegos (incluye barra de Arkanoid `1..9`)
   - Opción de viento para Artillery
+  - Panel de récords/highscores por juego con opción para reset global a `0`
   - Recordar pantalla de inicio y opción para olvidar selección guardada
   - Elegir presentación de la app: `Dock` o `Barra de menús`
   - Auto-inicio al iniciar sesión (`ON/OFF`)
+
+## Novedades recientes (v1.2.3)
+
+- Tetris muestra previsualización de próxima pieza.
+- Récords persistentes por juego + aviso de nuevo récord al terminar partida.
+- Arkanoid: control con cursores o rueda de ratón y escala de barra `1..9`.
+- Pac-Man: laberinto revisado para evitar zonas sin salida no deseadas.
+- Frogger: arrastre sobre troncos verdes corregido.
 
 ## Capturas
 

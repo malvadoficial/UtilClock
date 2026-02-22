@@ -1,5 +1,24 @@
 # Changelog
 
+## v1.2.3 - 2026-02-22
+
+- Game UX and progression improvements:
+  - Tetris now shows the next piece preview on the side.
+  - Added persistent highscores per game.
+  - Added highscore announcement when a run ends with a new record.
+  - Added highscores panel in Settings with global reset to `0`.
+- Arkanoid updates:
+  - Paddle can be controlled with keyboard arrows and mouse wheel.
+  - Paddle size option now supports levels `1..9`.
+  - Level `1` is now significantly smaller.
+  - Removed dynamic paddle-size boost behavior so size stays stable during play.
+- Pac-Man:
+  - Reworked maze layout to remove dead-end pathing issues.
+  - Fixed initial spawn position to a valid walkable cell.
+- Frogger:
+  - Fixed log transport logic so frog is continuously carried while on green logs.
+  - Collision checks now use carried horizontal position for consistent behavior.
+
 ## v1.2.2 - 2026-02-22
 
 - Fixed Frogger log transport behavior:
