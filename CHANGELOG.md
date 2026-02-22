@@ -1,5 +1,27 @@
 # Changelog
 
+## v1.2.0 - 2026-02-22
+
+- Major refactor:
+  - Split oversized `ContentView.swift` into focused files (`TopModes`, `Games`, `Settings`, `SystemLogic`, etc.).
+- Top screen upgrades:
+  - Added `Calendario` mode with month navigation and quick return to current day.
+  - Added `Tiempo` mode with current conditions and 5-day forecast layout.
+- Bottom screen mode unification:
+  - Games now use a launcher grid with multi-row scroll.
+  - Music modes unified into one launcher (tuner/chord finder/chord detector/metronome).
+  - Info modes unified (RAE/music thought/today in history).
+  - Apps and processes merged in one selectable mode.
+  - Audio device + volume merged in one mode.
+  - Storage + USB merged into one mode with disk usage visualization.
+  - Added `Red` mode (public/private IP and network throughput by interface).
+- Game updates:
+  - Added games: Tetris, Space Invaders, Asteroids, Tron, Pac-Man, Frogger, Artillery, Jump n' run.
+  - Improved controls and gameplay for Pong, Space Invaders, Asteroids, Tron, Pac-Man and Artillery.
+  - Artillery now supports variable cannon/target placement, optional wind, improved trajectory physics and speed-wheel controls.
+- Cleanup:
+  - Removed leftover series/video module code.
+
 ## v1.1.3 - 2026-02-22
 
 - Added app presentation mode with persisted preference:

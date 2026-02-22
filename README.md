@@ -9,27 +9,29 @@ Esta aplicación se ha desarrollado utilizando **Codex de OpenAI** y está pensa
 - Subpantalla superior:
   - Reloj
   - Reloj mundial
+  - Calendario mensual (navegación por mes y salto a hoy)
+  - Tiempo atmosférico actual + previsión en filas
   - Uptime
   - Cronómetro (`mm:ss:cc`)
   - Cuenta atrás
   - Alarma
 - Subpantalla inferior (modos configurables):
-  - Audio / USB / Almacenamiento
+  - Audio (dispositivo + volumen)
+  - Almacenamiento + USB (lista unificada)
+  - Red (IP pública/privada y tráfico por interfaz)
   - CPU + memoria
-  - Volumen
-  - Metrónomo
-  - Afinador
-  - Detector de acordes
-  - Buscador de acordes
-  - Búsqueda de palabras en RAE
-  - Tal día
-  - Frase musical
-  - Pong / Arkanoid / Snake / Missile Command
+  - Apps + procesos
+  - Música (launcher: metrónomo, afinador, detector y buscador de acordes)
+  - Info (launcher: RAE, frase musical y tal día)
+  - Juegos (launcher multi-fila con scroll):
+    - Pong, Arkanoid, Snake, Missile Command, Jump n' run (dino),
+    - Tetris, Space Invaders, Asteroids, Tron, Pac-Man, Frogger, Artillery
 - Configuración integrada:
   - Activar/desactivar modos
   - Reordenar modos
   - Color del display
   - Ajustes de tamaño para juegos
+  - Opción de viento para Artillery
   - Recordar pantalla de inicio y opción para olvidar selección guardada
   - Elegir presentación de la app: `Dock` o `Barra de menús`
   - Auto-inicio al iniciar sesión (`ON/OFF`)
