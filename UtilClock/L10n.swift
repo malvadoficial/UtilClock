@@ -47,6 +47,14 @@ enum L10n {
         text(es: "reloj mundial", en: "world clock")
     }
 
+    static var modeCalendar: String {
+        text(es: "calendario", en: "calendar")
+    }
+
+    static var modeWeather: String {
+        text(es: "tiempo", en: "weather")
+    }
+
     static var modeAwake: String {
         text(es: "despierto", en: "awake")
     }
@@ -79,6 +87,10 @@ enum L10n {
         text(es: "almacenamiento", en: "storage")
     }
 
+    static var modeNetwork: String {
+        text(es: "red", en: "network")
+    }
+
     static var modeCPU: String {
         text(es: "cpu", en: "cpu")
     }
@@ -89,6 +101,10 @@ enum L10n {
 
     static var modeProcesses: String {
         text(es: "procesos", en: "processes")
+    }
+
+    static var modeMusic: String {
+        text(es: "musica", en: "music")
     }
 
     static var modeVolume: String {
@@ -111,6 +127,14 @@ enum L10n {
         text(es: "buscador de acordes", en: "chord finder")
     }
 
+    static var modeGames: String {
+        text(es: "juegos", en: "games")
+    }
+
+    static var modeInfo: String {
+        text(es: "info", en: "info")
+    }
+
     static var modePong: String {
         text(es: "pong", en: "pong")
     }
@@ -127,16 +151,44 @@ enum L10n {
         text(es: "serpiente", en: "snake")
     }
 
+    static var modeChromeDino: String {
+        text(es: "jump n' run", en: "jump n' run")
+    }
+
+    static var modeTetris: String {
+        text(es: "tetris", en: "tetris")
+    }
+
+    static var modeSpaceInvaders: String {
+        text(es: "space invaders", en: "space invaders")
+    }
+
+    static var modeAsteroids: String {
+        text(es: "asteroids", en: "asteroids")
+    }
+
+    static var modeTron: String {
+        text(es: "tron", en: "tron")
+    }
+
+    static var modePacman: String {
+        text(es: "pac-man", en: "pac-man")
+    }
+
+    static var modeFrogger: String {
+        text(es: "frogger", en: "frogger")
+    }
+
+    static var modeArtillery: String {
+        text(es: "artilleria", en: "artillery")
+    }
+
     static var modeTodayInHistory: String {
         text(es: "tal dia", en: "this day")
     }
 
     static var modeMusicThought: String {
         text(es: "frase musical", en: "music thought")
-    }
-
-    static var modeSeries: String {
-        text(es: "ver al azar", en: "random watch")
     }
 
     static var modeRAE: String {
@@ -189,6 +241,34 @@ enum L10n {
 
     static var noRunningProcessesCPUData: String {
         text(es: "sin procesos para mostrar", en: "no processes to display")
+    }
+
+    static var networkPublicIP: String {
+        text(es: "IP publica", en: "Public IP")
+    }
+
+    static var networkPrivateIP: String {
+        text(es: "IP privada", en: "Private IP")
+    }
+
+    static var networkDownload: String {
+        text(es: "bajada", en: "download")
+    }
+
+    static var networkUpload: String {
+        text(es: "subida", en: "upload")
+    }
+
+    static var networkWiFi: String {
+        text(es: "Wi-Fi", en: "Wi-Fi")
+    }
+
+    static var networkEthernet: String {
+        text(es: "Ethernet", en: "Ethernet")
+    }
+
+    static var networkNoData: String {
+        text(es: "sin datos", en: "no data")
     }
 
     static var quitApp: String {
@@ -275,22 +355,6 @@ enum L10n {
         text(es: "click en diagrama para rotar", en: "click diagram to rotate")
     }
 
-    static var seriesChooseFolder: String {
-        text(es: "elegir carpeta", en: "choose folder")
-    }
-
-    static var seriesNoFolder: String {
-        text(es: "sin carpeta", en: "no folder")
-    }
-
-    static var seriesNoVideo: String {
-        text(es: "sin videos", en: "no videos")
-    }
-
-    static var seriesHint: String {
-        text(es: "elige carpeta y click para cambiar", en: "choose folder and click to switch")
-    }
-
     static var raePlaceholder: String {
         text(es: "palabra (ej: casa)", en: "word (e.g. house)")
     }
@@ -313,6 +377,14 @@ enum L10n {
 
     static var raeLastSearch: String {
         text(es: "ultima busqueda", en: "last search")
+    }
+
+    static var weatherLoading: String {
+        text(es: "cargando tiempo...", en: "loading weather...")
+    }
+
+    static var weatherError: String {
+        text(es: "error obteniendo tiempo", en: "weather fetch error")
     }
 
 }
