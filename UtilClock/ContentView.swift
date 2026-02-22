@@ -507,6 +507,9 @@ struct ContentView: View {
     @State var chordGeneratedVoicings: [ChordVoicing] = []
     @State var selectedMusicMode: MusicMode?
     @State var selectedGameMode: GameMode?
+    @State var gameHighscoresByKey: [String: Int] = [:]
+    @State var gameNewHighscoreMode: GameMode?
+    @State var gameNewHighscoreValue = 0
     @State var selectedInfoMode: InfoMode?
     @State var selectedAppsMonitorMode: AppsMonitorMode = .apps
     #if os(macOS)
@@ -571,6 +574,7 @@ struct ContentView: View {
     @State var arkanoidRunning = false
     @State var arkanoidScore = 0
     @State var arkanoidLives = 3
+    @State var arkanoidPaddleSizeLevel = 3
     @State var arkanoidBallPosition = CGPoint(x: 0.5, y: 0.78)
     @State var arkanoidBallVelocity = CGVector(dx: 0.58, dy: -0.62)
     @State var arkanoidPaddleCenterX: CGFloat = 0.5
@@ -611,6 +615,7 @@ struct ContentView: View {
     @State var tetrisLevel = 1
     @State var tetrisBoard: [[Int]] = Array(repeating: Array(repeating: 0, count: 10), count: 20)
     @State var tetrisCurrentPiece: TetrisPieceState?
+    @State var tetrisNextPieceKind: TetrisPieceKind?
     @State var tetrisDropAccumulator: CGFloat = 0
     @State var tetrisTimer: DispatchSourceTimer?
     @State var tetrisKeyboardMonitor: Any?
@@ -664,7 +669,7 @@ struct ContentView: View {
     @State var pacmanScore = 0
     @State var pacmanCols = 21
     @State var pacmanRows = 15
-    @State var pacmanPlayerPos = SIMD2<Int>(10, 11)
+    @State var pacmanPlayerPos = SIMD2<Int>(10, 10)
     @State var pacmanDirection = SIMD2<Int>(0, 0)
     @State var pacmanPendingDirection = SIMD2<Int>(0, 0)
     @State var pacmanPelletKeys: Set<String> = []
@@ -1624,7 +1629,10 @@ struct ContentView: View {
             deactivateMusicThoughtMode()
             stopHousekeepingTimer()
         }
-        .onChange(of: selectedGameMode) { _, _ in
+        .onChange(of: selectedGameMode) { oldMode, _ in
+            if let oldMode {
+                persistHighscoreSnapshot(for: oldMode)
+            }
             syncGameActivation()
         }
         .onChange(of: selectedMusicMode) { _, _ in

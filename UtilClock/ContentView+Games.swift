@@ -33,6 +33,25 @@ extension ContentView {
                 .padding(.leading, 18)
                 .padding(.top, 14)
             }
+
+            if let selectedGameMode, gameNewHighscoreMode == selectedGameMode {
+                VStack {
+                    Text("NUEVO RECORD \(gameNewHighscoreValue)")
+                        .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(phosphorColor)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(Color.black.opacity(0.52))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .stroke(phosphorColor.opacity(0.6), lineWidth: 1)
+                        )
+                    Spacer()
+                }
+                .padding(.top, 14)
+                .padding(.leading, 100)
+                .allowsHitTesting(false)
+            }
         }
     }
 
@@ -122,6 +141,66 @@ extension ContentView {
         case .artillery:
             return "scope"
         }
+    }
+
+    func highscore(for mode: GameMode) -> Int {
+        max(0, gameHighscoresByKey[mode.rawValue] ?? 0)
+    }
+
+    func clearHighscoreAnnouncement(for mode: GameMode) {
+        if gameNewHighscoreMode == mode {
+            gameNewHighscoreMode = nil
+            gameNewHighscoreValue = 0
+        }
+    }
+
+    func registerGameEnd(for mode: GameMode, score: Int) {
+        let safeScore = max(0, score)
+        let previous = highscore(for: mode)
+        if safeScore > previous {
+            gameHighscoresByKey[mode.rawValue] = safeScore
+            gameNewHighscoreMode = mode
+            gameNewHighscoreValue = safeScore
+            saveModeVisibilitySettings()
+        } else {
+            clearHighscoreAnnouncement(for: mode)
+        }
+    }
+
+    func currentScore(for mode: GameMode) -> Int {
+        switch mode {
+        case .pong:
+            return pongPlayerScore
+        case .arkanoid:
+            return arkanoidScore
+        case .missileCommand:
+            return missileScore
+        case .snake:
+            return snakeScore
+        case .chromeDino:
+            return Int(chromeDinoScore)
+        case .tetris:
+            return tetrisScore
+        case .spaceInvaders:
+            return spaceInvadersScore
+        case .asteroids:
+            return asteroidsScore
+        case .tron:
+            return tronScore
+        case .pacman:
+            return pacmanScore
+        case .frogger:
+            return froggerScore
+        case .artillery:
+            return artilleryScore
+        }
+    }
+
+    func persistHighscoreSnapshot(for mode: GameMode) {
+        let snapshot = currentScore(for: mode)
+        guard snapshot > highscore(for: mode) else { return }
+        gameHighscoresByKey[mode.rawValue] = snapshot
+        saveModeVisibilitySettings()
     }
 
     var gamesLauncherView: some View {
@@ -447,6 +526,11 @@ extension ContentView {
     }
 
     func resetPongGame() {
+        if pongPlayerScore > 0 || pongCPUScore > 0 {
+            registerGameEnd(for: .pong, score: pongPlayerScore)
+        } else {
+            clearHighscoreAnnouncement(for: .pong)
+        }
         pongRunning = false
         pongPlayerScore = 0
         pongCPUScore = 0
@@ -564,13 +648,25 @@ extension ContentView {
 
     var arkanoidColumns: Int { 8 }
     var arkanoidRows: Int { 5 }
+    var arkanoidBasePaddleWidthRatio: CGFloat {
+        switch arkanoidPaddleSizeLevel {
+        case 1: return 0.04
+        case 2: return 0.06
+        case 3: return 0.08
+        case 4: return 0.11
+        case 5: return 0.14
+        case 6: return 0.17
+        case 7: return 0.21
+        case 8: return 0.25
+        default: return 0.30
+        }
+    }
 
     var arkanoidView: some View {
         GeometryReader { geometry in
             let width = geometry.size.width * 0.92
             let height = geometry.size.height
-            let paddleBoostRatio: CGFloat = arkanoidPaddleBoostRemaining > 0 ? 1.35 : 1.0
-            let paddleWidth = width * 0.2 * paddleBoostRatio
+            let paddleWidth = width * arkanoidBasePaddleWidthRatio
             let paddleHeight = height * 0.025
             let paddleY = height * 0.9
             let paddleX = width * max(0.12, min(0.88, arkanoidPaddleCenterX))
@@ -614,7 +710,7 @@ extension ContentView {
                         .font(displayFont(size: max(20, height * 0.08), weight: .bold))
                         .foregroundStyle(phosphorColor)
                         .monospacedDigit()
-                    Text("LIVES \(arkanoidLives) · \(arkanoidRunning ? "RUN" : "STOP")\(arkanoidPaddleBoostRemaining > 0 ? " · BOOST" : "")")
+                    Text("LIVES \(arkanoidLives) · \(arkanoidRunning ? "RUN" : "STOP")")
                         .font(.system(size: max(12, height * 0.045), weight: .regular, design: .monospaced))
                         .foregroundStyle(phosphorDim)
                         .monospacedDigit()
@@ -622,7 +718,7 @@ extension ContentView {
                 .padding(.top, 10)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
 
-                Text("←/→ mueve · ↑ start · ↓ reset")
+                Text("←/→ mueve · rueda mueve · ↑ start · ↓ reset")
                     .font(.system(size: max(11, height * 0.043), weight: .regular, design: .monospaced))
                     .foregroundStyle(phosphorDim.opacity(0.9))
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
@@ -632,7 +728,10 @@ extension ContentView {
             .overlay(
                 MouseClickCatcher(
                     onLeftClick: { startArkanoid() },
-                    onRightClick: { resetArkanoidGame() }
+                    onRightClick: { resetArkanoidGame() },
+                    onScroll: { deltaY in
+                        moveArkanoidPaddleWithScroll(deltaY)
+                    }
                 )
             )
             .frame(width: width, height: height)
@@ -732,7 +831,20 @@ extension ContentView {
         arkanoidRunning = true
     }
 
+    func moveArkanoidPaddleWithScroll(_ deltaY: CGFloat) {
+        guard isGameActive(.arkanoid) else { return }
+        let sensitivity: CGFloat = 0.0015
+        let paddleHalfWidth = arkanoidBasePaddleWidthRatio * 0.5
+        let next = arkanoidPaddleCenterX + (deltaY * sensitivity)
+        arkanoidPaddleCenterX = max(paddleHalfWidth, min(1 - paddleHalfWidth, next))
+    }
+
     func resetArkanoidGame() {
+        if arkanoidScore > 0 {
+            registerGameEnd(for: .arkanoid, score: arkanoidScore)
+        } else {
+            clearHighscoreAnnouncement(for: .arkanoid)
+        }
         arkanoidRunning = false
         arkanoidScore = 0
         arkanoidLives = 3
@@ -766,10 +878,7 @@ extension ContentView {
     func updateArkanoidFrame(deltaTime dt: CGFloat) {
         guard isGameActive(.arkanoid) else { return }
         let paddleSpeed: CGFloat = 1.0
-        if arkanoidPaddleBoostRemaining > 0 {
-            arkanoidPaddleBoostRemaining = max(0, arkanoidPaddleBoostRemaining - dt)
-        }
-        let paddleHalfWidth: CGFloat = 0.1 * (arkanoidPaddleBoostRemaining > 0 ? 1.35 : 1.0)
+        let paddleHalfWidth: CGFloat = arkanoidBasePaddleWidthRatio * 0.5
         let paddleY: CGFloat = 0.9
         let paddleHeight: CGFloat = 0.025
         let ballRadius: CGFloat = 0.018
@@ -827,11 +936,6 @@ extension ContentView {
             if ballRect.intersects(brickRect) {
                 arkanoidBrickAlive[index] = false
                 arkanoidScore += 10
-                arkanoidHitsSinceBoost += 1
-                if arkanoidHitsSinceBoost >= 6 {
-                    arkanoidPaddleBoostRemaining = 7.5
-                    arkanoidHitsSinceBoost = 0
-                }
                 let overlapLeft = abs(ballRect.maxX - brickRect.minX)
                 let overlapRight = abs(brickRect.maxX - ballRect.minX)
                 let overlapTop = abs(ballRect.maxY - brickRect.minY)
@@ -858,6 +962,7 @@ extension ContentView {
             arkanoidLives -= 1
             triggerFlash()
             if arkanoidLives <= 0 {
+                registerGameEnd(for: .arkanoid, score: arkanoidScore)
                 arkanoidRunning = false
                 arkanoidLives = 3
                 arkanoidScore = 0
@@ -1036,6 +1141,11 @@ extension ContentView {
     }
 
     func resetMissileCommandGame() {
+        if missileScore > 0 {
+            registerGameEnd(for: .missileCommand, score: missileScore)
+        } else {
+            clearHighscoreAnnouncement(for: .missileCommand)
+        }
         missileRunning = false
         missileGameOver = false
         missileScore = 0
@@ -1176,6 +1286,7 @@ extension ContentView {
         if missileCities.contains(true) == false && missileBases.contains(true) == false {
             missileGameOver = true
             missileRunning = false
+            registerGameEnd(for: .missileCommand, score: missileScore)
             triggerFlash()
             return
         }
@@ -1467,6 +1578,11 @@ extension ContentView {
     }
 
     func resetSnakeGame() {
+        if snakeScore > 0 {
+            registerGameEnd(for: .snake, score: snakeScore)
+        } else {
+            clearHighscoreAnnouncement(for: .snake)
+        }
         snakeRunning = false
         snakeGameOver = false
         snakeScore = 0
@@ -1533,12 +1649,14 @@ extension ContentView {
         if newHead.x < 0 || newHead.x >= snakeCols || newHead.y < 0 || newHead.y >= snakeRows {
             snakeRunning = false
             snakeGameOver = true
+            registerGameEnd(for: .snake, score: snakeScore)
             triggerFlash()
             return
         }
         if snakeBody.contains(where: { $0 == newHead }) {
             snakeRunning = false
             snakeGameOver = true
+            registerGameEnd(for: .snake, score: snakeScore)
             triggerFlash()
             return
         }
@@ -1865,6 +1983,11 @@ extension ContentView {
     }
 
     func resetChromeDinoGame(startRunning: Bool) {
+        if Int(chromeDinoScore) > 0 {
+            registerGameEnd(for: .chromeDino, score: Int(chromeDinoScore))
+        } else {
+            clearHighscoreAnnouncement(for: .chromeDino)
+        }
         chromeDinoRunning = startRunning
         chromeDinoGameOver = false
         chromeDinoScore = 0
@@ -1918,6 +2041,7 @@ extension ContentView {
         if chromeDinoHasCollision() {
             chromeDinoRunning = false
             chromeDinoGameOver = true
+            registerGameEnd(for: .chromeDino, score: Int(chromeDinoScore))
             triggerFlash()
         }
     }
@@ -1998,6 +2122,10 @@ extension ContentView {
     var tetrisRows: Int { 20 }
     var tetrisCols: Int { 10 }
 
+    func tetrisPreviewCells(kind: TetrisPieceKind) -> [SIMD2<Int>] {
+        tetrisShape(kind: kind, rotation: 0)
+    }
+
     var tetrisView: some View {
         GeometryReader { geometry in
             let width = geometry.size.width
@@ -2009,6 +2137,8 @@ extension ContentView {
             let boardHeight = cellSize * CGFloat(tetrisRows)
             let boardX = (width - boardWidth) * 0.5
             let boardY = (height - boardHeight) * 0.5
+            let previewBoxSize = min(height * 0.22, boardWidth * 0.54)
+            let previewCellSize = previewBoxSize * 0.20
 
             ZStack {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
@@ -2061,6 +2191,51 @@ extension ContentView {
                                 )
                         }
                     }
+                }
+
+                if let nextKind = tetrisNextPieceKind {
+                    let previewCells = tetrisPreviewCells(kind: nextKind)
+                    let xs = previewCells.map(\.x)
+                    let ys = previewCells.map(\.y)
+                    let minX = xs.min() ?? 0
+                    let maxX = xs.max() ?? 0
+                    let minY = ys.min() ?? 0
+                    let maxY = ys.max() ?? 0
+                    let shapeWidth = CGFloat((maxX - minX) + 1) * previewCellSize
+                    let shapeHeight = CGFloat((maxY - minY) + 1) * previewCellSize
+
+                    VStack(spacing: 4) {
+                        Text("NEXT")
+                            .font(.system(size: max(10, height * 0.036), weight: .semibold, design: .monospaced))
+                            .foregroundStyle(phosphorDim)
+
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .fill(Color.black.opacity(0.35))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                        .stroke(phosphorColor.opacity(0.35), lineWidth: 1)
+                                )
+
+                            ForEach(Array(previewCells.enumerated()), id: \.offset) { _, cell in
+                                RoundedRectangle(cornerRadius: max(1.8, previewCellSize * 0.17), style: .continuous)
+                                    .fill(phosphorColor.opacity(0.92))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: max(1.8, previewCellSize * 0.17), style: .continuous)
+                                            .stroke(Color.white.opacity(0.7), lineWidth: max(1, previewCellSize * 0.08))
+                                    )
+                                    .frame(width: previewCellSize - 1, height: previewCellSize - 1)
+                                    .position(
+                                        x: (previewBoxSize - shapeWidth) * 0.5 + CGFloat(cell.x - minX) * previewCellSize + (previewCellSize * 0.5),
+                                        y: (previewBoxSize - shapeHeight) * 0.5 + CGFloat(cell.y - minY) * previewCellSize + (previewCellSize * 0.5)
+                                    )
+                            }
+                        }
+                        .frame(width: previewBoxSize, height: previewBoxSize)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                    .padding(.top, max(8, boardY))
+                    .padding(.trailing, max(12, width * 0.09))
                 }
 
                 VStack(spacing: 4) {
@@ -2171,6 +2346,11 @@ extension ContentView {
     }
 
     func resetTetrisGame(startRunning: Bool = false) {
+        if tetrisScore > 0 {
+            registerGameEnd(for: .tetris, score: tetrisScore)
+        } else {
+            clearHighscoreAnnouncement(for: .tetris)
+        }
         tetrisRunning = startRunning
         tetrisGameOver = false
         tetrisScore = 0
@@ -2206,13 +2386,15 @@ extension ContentView {
     }
 
     func tetrisSpawnPiece() {
-        let kind = TetrisPieceKind.allCases.randomElement() ?? .t
+        let kind = tetrisNextPieceKind ?? (TetrisPieceKind.allCases.randomElement() ?? .t)
+        tetrisNextPieceKind = TetrisPieceKind.allCases.randomElement() ?? .t
         let piece = TetrisPieceState(kind: kind, rotation: 0, x: 4, y: 0)
         if tetrisIsValidPosition(piece) {
             tetrisCurrentPiece = piece
         } else {
             tetrisRunning = false
             tetrisGameOver = true
+            registerGameEnd(for: .tetris, score: tetrisScore)
             triggerFlash()
         }
     }
@@ -2539,6 +2721,11 @@ extension ContentView {
     }
 
     func resetSpaceInvadersGame(startRunning: Bool = false) {
+        if spaceInvadersScore > 0 {
+            registerGameEnd(for: .spaceInvaders, score: spaceInvadersScore)
+        } else {
+            clearHighscoreAnnouncement(for: .spaceInvaders)
+        }
         spaceInvadersRunning = startRunning
         spaceInvadersGameOver = false
         spaceInvadersScore = 0
@@ -2623,6 +2810,7 @@ extension ContentView {
         if spaceInvadersEnemies.contains(where: { $0.y >= 0.84 }) {
             spaceInvadersRunning = false
             spaceInvadersGameOver = true
+            registerGameEnd(for: .spaceInvaders, score: spaceInvadersScore)
             return
         }
 
@@ -2666,6 +2854,7 @@ extension ContentView {
             if abs(bullet.x - spaceInvadersPlayerX) < 0.038, bullet.y >= 0.86, bullet.y <= 0.93 {
                 spaceInvadersRunning = false
                 spaceInvadersGameOver = true
+                registerGameEnd(for: .spaceInvaders, score: spaceInvadersScore)
                 triggerFlash(reason: .spaceInvadersPlayerHit)
                 return
             }
@@ -2845,6 +3034,11 @@ extension ContentView {
     }
 
     func resetAsteroidsGame(startRunning: Bool = false) {
+        if asteroidsScore > 0 {
+            registerGameEnd(for: .asteroids, score: asteroidsScore)
+        } else {
+            clearHighscoreAnnouncement(for: .asteroids)
+        }
         asteroidsRunning = startRunning
         asteroidsGameOver = false
         asteroidsScore = 0
@@ -3016,6 +3210,7 @@ extension ContentView {
             if (dx * dx + dy * dy) <= (hitDistance * hitDistance) {
                 asteroidsRunning = false
                 asteroidsGameOver = true
+                registerGameEnd(for: .asteroids, score: asteroidsScore)
                 triggerFlash()
                 return
             }
@@ -3164,6 +3359,11 @@ extension ContentView {
     }
 
     func resetTronGame(startRunning: Bool = false) {
+        if startRunning == false, tronScore > 0 {
+            registerGameEnd(for: .tron, score: tronScore)
+        } else if startRunning == false {
+            clearHighscoreAnnouncement(for: .tron)
+        }
         tronRunning = startRunning
         tronGameOver = false
         tronScore = 0
@@ -3193,6 +3393,7 @@ extension ContentView {
         if playerDead || headOn {
             tronRunning = false
             tronGameOver = true
+            registerGameEnd(for: .tron, score: tronScore)
             triggerFlash()
             return
         }
@@ -3400,12 +3601,17 @@ extension ContentView {
     }
 
     func resetPacmanGame(startRunning: Bool = false) {
+        if startRunning == false, pacmanScore > 0 {
+            registerGameEnd(for: .pacman, score: pacmanScore)
+        } else if startRunning == false {
+            clearHighscoreAnnouncement(for: .pacman)
+        }
         pacmanRunning = startRunning
         pacmanGameOver = false
         pacmanScore = 0
         pacmanCols = pacmanMazeLayout.first?.count ?? 21
         pacmanRows = pacmanMazeLayout.count
-        pacmanPlayerPos = SIMD2<Int>(10, 11)
+        pacmanPlayerPos = SIMD2<Int>(10, 10)
         pacmanDirection = SIMD2<Int>(0, 0)
         pacmanPendingDirection = SIMD2<Int>(0, 0)
         pacmanPoweredRemaining = 0
@@ -3430,19 +3636,19 @@ extension ContentView {
     var pacmanMazeLayout: [String] {
         [
             "#####################",
-            "#o.......#.......o..#",
-            "#.###.##.#.##.###.###",
-            "#.....##...##.......#",
-            "###.#.#####.#####.#.#",
-            "#...#...#.....#...#.#",
-            "#.#####.# ### #.###.#",
-            "#.......#     #.....#",
-            "#.#####.# ### #.###.#",
-            "#...#...#.....#...#.#",
-            "###.#.#####.#####.#.#",
-            "#.....##...##.......#",
-            "#.###.##.#.##.###.###",
-            "#o.......#.......o..#",
+            "#o.................o#",
+            "#...................#",
+            "#..###..#####..###..#",
+            "#...................#",
+            "#..#.#..#...#..#.#..#",
+            "#...................#",
+            "#..###..#...#..###..#",
+            "#...................#",
+            "#..#.#..#...#..#.#..#",
+            "#...................#",
+            "#..###..#####..###..#",
+            "#...................#",
+            "#o.................o#",
             "#####################"
         ]
     }
@@ -3561,6 +3767,7 @@ extension ContentView {
             } else {
                 pacmanRunning = false
                 pacmanGameOver = true
+                registerGameEnd(for: .pacman, score: pacmanScore)
                 triggerFlash()
                 return
             }
@@ -3610,7 +3817,10 @@ extension ContentView {
                 Circle()
                     .fill(phosphorColor)
                     .frame(width: cell * 0.72, height: cell * 0.72)
-                    .position(x: ox + (CGFloat(froggerPlayerCol) + 0.5) * cell, y: oy + (CGFloat(froggerPlayerRow) + 0.5) * cell)
+                    .position(
+                        x: ox + ((CGFloat(froggerPlayerCol) + 0.5 + froggerCarryAccumulator) * cell),
+                        y: oy + (CGFloat(froggerPlayerRow) + 0.5) * cell
+                    )
 
                 VStack(spacing: 4) {
                     Text("FROGGER  \(froggerScore)")
@@ -3705,6 +3915,11 @@ extension ContentView {
     }
 
     func resetFroggerGame(startRunning: Bool = false) {
+        if froggerScore > 0 {
+            registerGameEnd(for: .frogger, score: froggerScore)
+        } else {
+            clearHighscoreAnnouncement(for: .frogger)
+        }
         froggerRunning = startRunning
         froggerGameOver = false
         froggerScore = 0
@@ -3753,9 +3968,17 @@ extension ContentView {
             }
         }
 
-        let playerX = (CGFloat(froggerPlayerCol) + 0.5) / CGFloat(froggerCols)
+        let playerX = (CGFloat(froggerPlayerCol) + 0.5 + froggerCarryAccumulator) / CGFloat(froggerCols)
         let inWaterLane = froggerPlayerRow >= 2 && froggerPlayerRow <= 5
         let inRoadLane = froggerPlayerRow >= 7 && froggerPlayerRow <= 10
+
+        if inWaterLane, (playerX <= 0 || playerX >= 1) {
+            froggerRunning = false
+            froggerGameOver = true
+            registerGameEnd(for: .frogger, score: froggerScore)
+            triggerFlash()
+            return
+        }
 
         if inRoadLane {
             for obstacle in froggerObstacles where obstacle.isLog == false && obstacle.lane == froggerPlayerRow {
@@ -3763,6 +3986,7 @@ extension ContentView {
                 if playerX >= obstacle.x - half, playerX <= obstacle.x + half {
                     froggerRunning = false
                     froggerGameOver = true
+                    registerGameEnd(for: .frogger, score: froggerScore)
                     triggerFlash()
                     return
                 }
@@ -3781,6 +4005,7 @@ extension ContentView {
                         if nextCol < 0 || nextCol >= froggerCols {
                             froggerRunning = false
                             froggerGameOver = true
+                            registerGameEnd(for: .frogger, score: froggerScore)
                             triggerFlash()
                             return
                         }
@@ -3793,6 +4018,7 @@ extension ContentView {
                 froggerCarryAccumulator = 0
                 froggerRunning = false
                 froggerGameOver = true
+                registerGameEnd(for: .frogger, score: froggerScore)
                 triggerFlash()
                 return
             }
@@ -4012,6 +4238,11 @@ extension ContentView {
     }
 
     func resetArtilleryGame() {
+        if artilleryScore > 0 {
+            registerGameEnd(for: .artillery, score: artilleryScore)
+        } else {
+            clearHighscoreAnnouncement(for: .artillery)
+        }
         artilleryRunning = false
         artilleryScore = 0
         artilleryAngleDeg = 44

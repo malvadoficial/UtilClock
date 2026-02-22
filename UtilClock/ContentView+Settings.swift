@@ -342,6 +342,29 @@ extension ContentView {
                                             }
                                             #endif
 
+                                        Text("arkanoid barra \(arkanoidPaddleSizeLevel)")
+                                            .font(.system(size: 16, weight: .semibold, design: .monospaced))
+                                            .foregroundStyle(phosphorDim)
+                                            .padding(.horizontal, 8)
+                                            .padding(.vertical, 4)
+                                            .background(Color.black.opacity(0.35))
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                                    .stroke(phosphorColor.opacity(0.45), lineWidth: 1)
+                                            )
+                                            #if os(macOS)
+                                            .overlay(
+                                                MouseClickCatcher(
+                                                    onLeftClick: { rotateArkanoidPaddleSize(forward: true) },
+                                                    onRightClick: { rotateArkanoidPaddleSize(forward: false) }
+                                                )
+                                            )
+                                            #else
+                                            .onTapGesture {
+                                                rotateArkanoidPaddleSize(forward: true)
+                                            }
+                                            #endif
+
                                         Text(artilleryWindEnabled ? "wind on" : "wind off")
                                             .font(.system(size: 16, weight: .semibold, design: .monospaced))
                                             .foregroundStyle(artilleryWindEnabled ? phosphorColor : phosphorDim)
@@ -382,6 +405,53 @@ extension ContentView {
                                     draggedItem: $draggedUtilityMode,
                                     onReorder: { saveModeVisibilitySettings() }
                                 ))
+                            }
+                        }
+
+                        Divider()
+                            .background(phosphorDim.opacity(0.4))
+                            .padding(.vertical, 6)
+
+                        HStack {
+                            Text("Records / Highscores")
+                                .font(.system(size: 20, weight: .semibold, design: .monospaced))
+                                .foregroundStyle(phosphorDim)
+                            Spacer()
+                            Button(action: resetAllGameHighscores) {
+                                Text("Poner todos a 0")
+                                    .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                                    .foregroundStyle(Color.red.opacity(0.9))
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 6)
+                                    .background(Color.black.opacity(0.45))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                            .stroke(Color.red.opacity(0.55), lineWidth: 1)
+                                    )
+                            }
+                            .buttonStyle(.plain)
+                        }
+
+                        VStack(spacing: 7) {
+                            ForEach(GameMode.allCases, id: \.self) { mode in
+                                HStack(spacing: 8) {
+                                    Text(gameTitle(for: mode).uppercased())
+                                        .font(.system(size: 15, weight: .regular, design: .monospaced))
+                                        .foregroundStyle(phosphorColor)
+                                        .lineLimit(1)
+                                    Spacer(minLength: 8)
+                                    Text("\(highscore(for: mode))")
+                                        .font(.system(size: 16, weight: .semibold, design: .monospaced))
+                                        .foregroundStyle(phosphorDim)
+                                        .monospacedDigit()
+                                }
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 8)
+                                .background(Color.black.opacity(0.18))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                        .stroke(phosphorColor.opacity(0.2), lineWidth: 1)
+                                )
                             }
                         }
 
@@ -652,6 +722,32 @@ extension ContentView {
             snakeBoardSizeLevel = 3
         }
 
+        let savedArkanoidPaddleSize = defaults.integer(forKey: "utilclock.arkanoidPaddleSizeLevel")
+        if savedArkanoidPaddleSize >= 1, savedArkanoidPaddleSize <= 9 {
+            arkanoidPaddleSizeLevel = savedArkanoidPaddleSize
+        } else {
+            arkanoidPaddleSizeLevel = 5
+        }
+
+        if let storedHighscores = defaults.dictionary(forKey: "utilclock.gameHighscores") {
+            var normalized: [String: Int] = [:]
+            for mode in GameMode.allCases {
+                let rawValue = storedHighscores[mode.rawValue]
+                let score: Int
+                if let value = rawValue as? Int {
+                    score = value
+                } else if let number = rawValue as? NSNumber {
+                    score = number.intValue
+                } else {
+                    score = 0
+                }
+                normalized[mode.rawValue] = max(0, score)
+            }
+            gameHighscoresByKey = normalized
+        } else {
+            gameHighscoresByKey = Dictionary(uniqueKeysWithValues: GameMode.allCases.map { ($0.rawValue, 0) })
+        }
+
         if defaults.object(forKey: "utilclock.artilleryWindEnabled") != nil {
             artilleryWindEnabled = defaults.bool(forKey: "utilclock.artilleryWindEnabled")
         } else {
@@ -679,7 +775,9 @@ extension ContentView {
         defaults.set(utilityModeOrder.map(\.key), forKey: "utilclock.utilityModeOrder")
         defaults.set(max(1, min(4, pongFieldSizeLevel)), forKey: "utilclock.pongFieldSizeLevel")
         defaults.set(max(1, min(4, snakeBoardSizeLevel)), forKey: "utilclock.snakeBoardSizeLevel")
+        defaults.set(max(1, min(9, arkanoidPaddleSizeLevel)), forKey: "utilclock.arkanoidPaddleSizeLevel")
         defaults.set(artilleryWindEnabled, forKey: "utilclock.artilleryWindEnabled")
+        defaults.set(gameHighscoresByKey, forKey: "utilclock.gameHighscores")
         defaults.set(preferredFullscreen, forKey: preferredFullscreenKey)
         defaults.set(menuBarOnlyMode, forKey: menuBarOnlyModeKey)
     }
@@ -702,6 +800,23 @@ extension ContentView {
             snakeBoardSizeLevel = current == 1 ? 4 : current - 1
         }
         resetSnakeGame()
+        saveModeVisibilitySettings()
+    }
+
+    func rotateArkanoidPaddleSize(forward: Bool) {
+        let current = max(1, min(9, arkanoidPaddleSizeLevel))
+        if forward {
+            arkanoidPaddleSizeLevel = current == 9 ? 1 : current + 1
+        } else {
+            arkanoidPaddleSizeLevel = current == 1 ? 9 : current - 1
+        }
+        saveModeVisibilitySettings()
+    }
+
+    func resetAllGameHighscores() {
+        gameHighscoresByKey = Dictionary(uniqueKeysWithValues: GameMode.allCases.map { ($0.rawValue, 0) })
+        gameNewHighscoreMode = nil
+        gameNewHighscoreValue = 0
         saveModeVisibilitySettings()
     }
 
