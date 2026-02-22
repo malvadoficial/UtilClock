@@ -158,73 +158,147 @@ extension ContentView {
 
     @ViewBuilder
     func networkUtilityView(dateSize: CGFloat, driveTitleSize: CGFloat) -> some View {
-        ScrollView(.vertical, showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 18) {
+        GeometryReader { geometry in
+            let wideLayout = geometry.size.width >= 760
+            let labelFontSize = max(11, dateSize * 0.74)
+            let valueFontSize = max(17, driveTitleSize * 0.72)
+            let ipFontSize = max(18, driveTitleSize * 0.76)
+
+            ScrollView(.vertical, showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("\(L10n.networkWiFi) (\(networkWiFiInterfaceName))")
-                        .font(.system(size: max(13, dateSize * 0.9), weight: .medium, design: .monospaced))
-                        .foregroundStyle(phosphorDim)
-                    HStack(spacing: 14) {
-                        Text("↓ \(L10n.networkDownload): \(formattedNetworkSpeed(networkWiFiDownloadBytesPerSecond))")
-                        Text("↑ \(L10n.networkUpload): \(formattedNetworkSpeed(networkWiFiUploadBytesPerSecond))")
+                    networkPublicIPPanel(
+                        value: networkPublicIPAddress,
+                        labelFontSize: labelFontSize,
+                        valueFontSize: ipFontSize
+                    )
+
+                    HStack(alignment: .top, spacing: 8) {
+                        networkInterfacePanel(
+                            title: "\(L10n.networkWiFi) (\(networkWiFiInterfaceName))",
+                            download: networkWiFiDownloadBytesPerSecond,
+                            upload: networkWiFiUploadBytesPerSecond,
+                            privateIP: networkWiFiPrivateIPAddress,
+                            labelFontSize: labelFontSize,
+                            valueFontSize: valueFontSize,
+                            ipFontSize: ipFontSize
+                        )
+
+                        if wideLayout {
+                            networkInterfacePanel(
+                                title: "\(L10n.networkEthernet) (\(networkEthernetInterfaceName))",
+                                download: networkEthernetDownloadBytesPerSecond,
+                                upload: networkEthernetUploadBytesPerSecond,
+                                privateIP: networkEthernetPrivateIPAddress,
+                                labelFontSize: labelFontSize,
+                                valueFontSize: valueFontSize,
+                                ipFontSize: ipFontSize
+                            )
+                        }
                     }
-                    .font(.system(size: max(18, driveTitleSize * 0.82), weight: .semibold, design: .monospaced))
-                    .foregroundStyle(phosphorColor)
-                    .monospacedDigit()
-                }
 
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("\(L10n.networkEthernet) (\(networkEthernetInterfaceName))")
-                        .font(.system(size: max(13, dateSize * 0.9), weight: .medium, design: .monospaced))
-                        .foregroundStyle(phosphorDim)
-                    HStack(spacing: 14) {
-                        Text("↓ \(L10n.networkDownload): \(formattedNetworkSpeed(networkEthernetDownloadBytesPerSecond))")
-                        Text("↑ \(L10n.networkUpload): \(formattedNetworkSpeed(networkEthernetUploadBytesPerSecond))")
+                    if wideLayout == false {
+                        networkInterfacePanel(
+                            title: "\(L10n.networkEthernet) (\(networkEthernetInterfaceName))",
+                            download: networkEthernetDownloadBytesPerSecond,
+                            upload: networkEthernetUploadBytesPerSecond,
+                            privateIP: networkEthernetPrivateIPAddress,
+                            labelFontSize: labelFontSize,
+                            valueFontSize: valueFontSize,
+                            ipFontSize: ipFontSize
+                        )
                     }
-                    .font(.system(size: max(18, driveTitleSize * 0.82), weight: .semibold, design: .monospaced))
-                    .foregroundStyle(phosphorColor)
-                    .monospacedDigit()
                 }
-
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(L10n.networkPublicIP)
-                        .font(.system(size: max(14, dateSize * 0.95), weight: .medium, design: .monospaced))
-                        .foregroundStyle(phosphorDim)
-                    Text(networkPublicIPAddress)
-                        .font(.system(size: max(26, driveTitleSize * 1.12), weight: .bold, design: .monospaced))
-                        .foregroundStyle(phosphorColor)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.78)
-                }
-
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("\(L10n.networkPrivateIP) \(L10n.networkWiFi)")
-                        .font(.system(size: max(14, dateSize * 0.95), weight: .medium, design: .monospaced))
-                        .foregroundStyle(phosphorDim)
-                    Text(networkWiFiPrivateIPAddress)
-                        .font(.system(size: max(26, driveTitleSize * 1.12), weight: .bold, design: .monospaced))
-                        .foregroundStyle(phosphorColor)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.78)
-                }
-
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("\(L10n.networkPrivateIP) \(L10n.networkEthernet)")
-                        .font(.system(size: max(14, dateSize * 0.95), weight: .medium, design: .monospaced))
-                        .foregroundStyle(phosphorDim)
-                    Text(networkEthernetPrivateIPAddress)
-                        .font(.system(size: max(26, driveTitleSize * 1.12), weight: .bold, design: .monospaced))
-                        .foregroundStyle(phosphorColor)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.78)
-                }
+                .padding(.top, 52)
+                .padding(.leading, 26)
+                .padding(.trailing, 12)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .padding(.top, 76)
-        .padding(.leading, 44)
-        .padding(.trailing, 12)
+    }
+
+    @ViewBuilder
+    func networkPublicIPPanel(
+        value: String,
+        labelFontSize: CGFloat,
+        valueFontSize: CGFloat
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(L10n.networkPublicIP)
+                .font(.system(size: labelFontSize, weight: .semibold, design: .monospaced))
+                .foregroundStyle(phosphorDim)
+                .lineLimit(1)
+                .minimumScaleFactor(0.82)
+            Text(value)
+                .font(displayFont(size: valueFontSize, weight: .bold))
+                .foregroundStyle(phosphorColor)
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+                .monospacedDigit()
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.black.opacity(0.26))
+        .overlay(
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .stroke(phosphorColor.opacity(0.22), lineWidth: 1)
+        )
+    }
+
+    @ViewBuilder
+    func networkInterfacePanel(
+        title: String,
+        download: Double,
+        upload: Double,
+        privateIP: String,
+        labelFontSize: CGFloat,
+        valueFontSize: CGFloat,
+        ipFontSize: CGFloat
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(title)
+                .font(.system(size: labelFontSize, weight: .semibold, design: .monospaced))
+                .foregroundStyle(phosphorDim)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+
+            HStack(spacing: 8) {
+                Text("↓ \(formattedNetworkSpeed(download))")
+                    .font(displayFont(size: valueFontSize, weight: .bold))
+                    .foregroundStyle(phosphorColor)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.84)
+                    .monospacedDigit()
+                Text("↑ \(formattedNetworkSpeed(upload))")
+                    .font(displayFont(size: valueFontSize, weight: .bold))
+                    .foregroundStyle(phosphorColor)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.84)
+                    .monospacedDigit()
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(L10n.networkPrivateIP)
+                    .font(.system(size: labelFontSize, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(phosphorDim)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
+                Text(privateIP)
+                    .font(displayFont(size: ipFontSize, weight: .bold))
+                    .foregroundStyle(phosphorColor)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+                    .monospacedDigit()
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.black.opacity(0.26))
+        .overlay(
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .stroke(phosphorColor.opacity(0.22), lineWidth: 1)
+        )
     }
 
     @ViewBuilder
