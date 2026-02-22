@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.2.1 - 2026-02-22
+
+- Improved `Red / Network` mode visual layout:
+  - Unified app-style typography and reduced oversized text.
+  - Reordered data: public IP first.
+  - Grouped interface data by device (WiFi/Ethernet), including speeds + private IP in the same card.
+  - Added responsive two-column layout for interfaces when width allows.
+  - Tightened spacing to prevent overflow and keep margins stable.
+
 ## v1.2.0 - 2026-02-22
 
 - Major refactor:
