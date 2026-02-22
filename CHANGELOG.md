@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.2.2 - 2026-02-22
+
+- Fixed Frogger log transport behavior:
+  - The frog now moves correctly with green floating platforms.
+  - Improved carry precision to avoid jerky transport and edge desyncs.
+- Stopwatch pre-countdown now plays the same `tic` sound on `3`, `2`, `1`.
+
 ## v1.2.1 - 2026-02-22
 
 - Improved `Red / Network` mode visual layout:

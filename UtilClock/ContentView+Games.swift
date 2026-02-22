@@ -3663,18 +3663,22 @@ extension ContentView {
             switch event.keyCode {
             case 123:
                 froggerPlayerCol = max(0, froggerPlayerCol - 1)
+                froggerCarryAccumulator = 0
                 froggerRunning = true
                 return nil
             case 124:
                 froggerPlayerCol = min(froggerCols - 1, froggerPlayerCol + 1)
+                froggerCarryAccumulator = 0
                 froggerRunning = true
                 return nil
             case 125:
                 froggerPlayerRow = min(froggerRows - 1, froggerPlayerRow + 1)
+                froggerCarryAccumulator = 0
                 froggerRunning = true
                 return nil
             case 126:
                 froggerPlayerRow = max(0, froggerPlayerRow - 1)
+                froggerCarryAccumulator = 0
                 froggerRunning = true
                 return nil
             case 36:
@@ -3706,6 +3710,7 @@ extension ContentView {
         froggerScore = 0
         froggerPlayerCol = froggerCols / 2
         froggerPlayerRow = froggerRows - 1
+        froggerCarryAccumulator = 0
         froggerObstacles = []
 
         for lane in 2...5 {
@@ -3768,24 +3773,38 @@ extension ContentView {
                 let half = obstacle.width * 0.5
                 if playerX >= obstacle.x - half, playerX <= obstacle.x + half {
                     onLog = true
-                    let driftCols = obstacle.speed * dt * CGFloat(froggerCols)
-                    let drifted = CGFloat(froggerPlayerCol) + driftCols
-                    froggerPlayerCol = max(0, min(froggerCols - 1, Int(drifted.rounded())))
+                    froggerCarryAccumulator += obstacle.speed * dt * CGFloat(froggerCols)
+                    let carryStep = Int(froggerCarryAccumulator.rounded(.towardZero))
+                    if carryStep != 0 {
+                        let nextCol = froggerPlayerCol + carryStep
+                        froggerCarryAccumulator -= CGFloat(carryStep)
+                        if nextCol < 0 || nextCol >= froggerCols {
+                            froggerRunning = false
+                            froggerGameOver = true
+                            triggerFlash()
+                            return
+                        }
+                        froggerPlayerCol = nextCol
+                    }
                     break
                 }
             }
             if onLog == false {
+                froggerCarryAccumulator = 0
                 froggerRunning = false
                 froggerGameOver = true
                 triggerFlash()
                 return
             }
+        } else {
+            froggerCarryAccumulator = 0
         }
 
         if froggerPlayerRow == 0 {
             froggerScore += 200
             froggerPlayerCol = froggerCols / 2
             froggerPlayerRow = froggerRows - 1
+            froggerCarryAccumulator = 0
             triggerFlash()
         }
     }

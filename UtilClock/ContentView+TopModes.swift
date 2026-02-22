@@ -667,10 +667,12 @@ extension ContentView {
     func startStopwatchPrestartCountdown() {
         cancelStopwatchPrestartCountdown()
         stopwatchPrestartInProgress = true
+        prepareCountdownBeepPlayerIfNeeded()
 
         stopwatchPrestartTask = Task { @MainActor in
             for value in stride(from: 3, through: 1, by: -1) {
                 stopwatchPrestartDisplayValue = value
+                playCountdownFinalSecondsBeep()
                 #if os(macOS)
                 triggerFlash()
                 #endif
