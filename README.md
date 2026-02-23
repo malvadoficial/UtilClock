@@ -37,13 +37,17 @@ Esta aplicación se ha desarrollado utilizando **Codex de OpenAI** y está pensa
   - Elegir presentación de la app: `Dock` o `Barra de menús`
   - Auto-inicio al iniciar sesión (`ON/OFF`)
 
-## Novedades recientes (v1.2.3)
+## Novedades recientes (v1.2.4)
 
-- Tetris muestra previsualización de próxima pieza.
-- Récords persistentes por juego + aviso de nuevo récord al terminar partida.
-- Arkanoid: control con cursores o rueda de ratón y escala de barra `1..9`.
-- Pac-Man: laberinto revisado para evitar zonas sin salida no deseadas.
-- Frogger: arrastre sobre troncos verdes corregido.
+- `Ver Fotos` restaurado y completado:
+  - Integración con app Fotos (álbumes normales + inteligentes, incluyendo `Favoritas`).
+  - Selección de carpeta o álbum con persistencia entre ejecuciones.
+  - Inicio en fullscreen al pulsar `START`, con reloj opcional sobreimpreso.
+  - Reproducción de imágenes en orden aleatorio (sin repetir consecutivamente).
+  - Layout del launcher reorganizado en dos columnas para mejorar legibilidad.
+- Mejoras de UX en permisos de Fotos:
+  - Solicitud de permiso desde la app.
+  - Apertura rápida de ajustes de privacidad cuando el permiso está denegado.
 
 ## Capturas
 

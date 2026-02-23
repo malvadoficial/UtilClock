@@ -14,6 +14,7 @@ import AVFoundation
 import QuartzCore
 import ServiceManagement
 import UniformTypeIdentifiers
+import Photos
 #endif
 
 struct ContentView: View {
@@ -90,6 +91,7 @@ struct ContentView: View {
         case network
         case cpu
         case apps
+        case photos
         case music
         case games
         case info
@@ -101,6 +103,7 @@ struct ContentView: View {
             case .network: return "network"
             case .cpu: return "cpu"
             case .apps: return "apps"
+            case .photos: return "photos"
             case .music: return "music"
             case .games: return "games"
             case .info: return "info"
@@ -113,7 +116,8 @@ struct ContentView: View {
             case .storage: return .network
             case .network: return .cpu
             case .cpu: return .apps
-            case .apps: return .music
+            case .apps: return .photos
+            case .photos: return .music
             case .music: return .games
             case .games: return .info
             case .info: return .audio
@@ -127,7 +131,8 @@ struct ContentView: View {
             case .network: return .storage
             case .cpu: return .network
             case .apps: return .cpu
-            case .music: return .apps
+            case .photos: return .apps
+            case .music: return .photos
             case .games: return .music
             case .info: return .games
             }
@@ -193,6 +198,12 @@ struct ContentView: View {
         let year: Int
         let es: String
         let en: String
+    }
+
+    struct PhotosAlbum: Identifiable, Hashable {
+        let id: String
+        let title: String
+        let count: Int
     }
 
     #if os(macOS)
@@ -512,6 +523,22 @@ struct ContentView: View {
     @State var gameNewHighscoreValue = 0
     @State var selectedInfoMode: InfoMode?
     @State var selectedAppsMonitorMode: AppsMonitorMode = .apps
+    @State var photosSelectedFolderPath = ""
+    @State var photosSelectedFolderBookmark: Data?
+    @State var photosImageURLs: [URL] = []
+    @State var photosCurrentIndex = 0
+    @State var photosIsRunning = false
+    @State var photosShowClock = true
+    @State var photosSlideDurationSeconds: Double = 30
+    @State var photosTimer: Timer?
+    @State var photosSourceType = "folder"
+    @State var photosSelectedAlbumID = ""
+    @State var photosSelectedAlbumName = ""
+    @State var photosAlbums: [PhotosAlbum] = []
+    @State var photosShowAlbumsList = false
+    @State var photosPermissionStatus = "unknown"
+    @State var photosLoading = false
+    @State var photosStartWhenReady = false
     #if os(macOS)
     @State var draggedTopMode: TopClockMode?
     @State var draggedUtilityMode: UtilityMode?
@@ -1373,6 +1400,8 @@ struct ContentView: View {
                             networkUtilityView(dateSize: dateSize, driveTitleSize: driveTitleSize)
                         } else if utilityMode == .storage {
                             storageUtilityView(rowFontSize: driveTitleSize)
+                        } else if utilityMode == .photos {
+                            photosUtilityView(dateSize: dateSize)
                         }
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -1486,7 +1515,8 @@ struct ContentView: View {
                     let hideUtilityTagInAggregatedSubmode =
                         (utilityMode == .music && selectedMusicMode != nil) ||
                         (utilityMode == .games && selectedGameMode != nil) ||
-                        (utilityMode == .info && selectedInfoMode != nil)
+                        (utilityMode == .info && selectedInfoMode != nil) ||
+                        (utilityMode == .photos && photosIsRunning && splitFullscreenTarget == .bottom)
                     if hideUtilityTagInAggregatedSubmode == false {
                     modeSelectorTag(
                         utilityModeLabel,
@@ -1555,6 +1585,7 @@ struct ContentView: View {
             syncGameActivation()
             syncInfoActivation()
             refreshWeatherDataIfNeeded(force: true)
+            loadPhotoModeSettings()
         }
         .onChange(of: usbMonitor.volumes.map(\.id)) { _, ids in
             let newIDs = Set(ids)
@@ -1592,6 +1623,9 @@ struct ContentView: View {
                 selectedInfoMode = nil
             }
             syncInfoActivation()
+            if newMode != .photos {
+                stopPhotosSlideshow()
+            }
 
         }
         .simultaneousGesture(
@@ -1628,6 +1662,7 @@ struct ContentView: View {
             deactivateTodayInHistoryMode()
             deactivateMusicThoughtMode()
             stopHousekeepingTimer()
+            stopPhotosSlideshow()
         }
         .onChange(of: selectedGameMode) { oldMode, _ in
             if let oldMode {
@@ -1783,6 +1818,8 @@ struct ContentView: View {
             return L10n.modeCPU
         case .apps:
             return L10n.modeApps
+        case .photos:
+            return L10n.modePhotos
         case .music:
             return L10n.modeMusic
         case .games:

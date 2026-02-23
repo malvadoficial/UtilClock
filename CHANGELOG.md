@@ -1,5 +1,25 @@
 # Changelog
 
+## v1.2.4 - 2026-02-23
+
+- Restored and completed `Ver Fotos` mode with integrated slideshow flow.
+- Added real Photos app integration:
+  - Album list loading from Photos library (regular + smart albums, including `Favoritas`).
+  - Album selection with persisted source between app launches.
+  - Permission handling and in-app prompt/open settings behavior for Photos access.
+- Added folder source support with persisted security-scoped bookmark and path restore.
+- Reworked `Ver Fotos` launcher layout into a clearer two-column UI:
+  - Source controls (`Album Fotos` / `Carpeta`) and separate rows for `Mostrar reloj` / `Duración`.
+  - Selected source display area with album list toggle in-place.
+  - Dedicated `START` area and photo count alignment.
+- Slideshow behavior improvements:
+  - Start directly in bottom fullscreen view.
+  - Exit slideshow on click/tap back to launcher.
+  - Random image order with non-repeating consecutive picks.
+- Overlay clock improvements in slideshow:
+  - Optional overlay toggle.
+  - Much slower, softer color cycling for better readability.
+
 ## v1.2.3 - 2026-02-22
 
 - Game UX and progression improvements:
