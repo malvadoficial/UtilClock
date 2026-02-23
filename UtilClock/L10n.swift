@@ -103,6 +103,66 @@ enum L10n {
         text(es: "ver fotos", en: "view photos")
     }
 
+    static var photosAlbumButton: String {
+        text(es: "album fotos", en: "photos album")
+    }
+
+    static var photosFolderButton: String {
+        text(es: "carpeta", en: "folder")
+    }
+
+    static var photosShowClock: String {
+        text(es: "mostrar reloj", en: "show clock")
+    }
+
+    static var photosDuration: String {
+        text(es: "duracion", en: "duration")
+    }
+
+    static var photosRequestPermission: String {
+        text(es: "pedir permiso", en: "request permission")
+    }
+
+    static var photosNoAlbums: String {
+        text(es: "sin albumes", en: "no albums")
+    }
+
+    static var photosSource: String {
+        text(es: "origen", en: "source")
+    }
+
+    static var photosCount: String {
+        text(es: "fotos", en: "photos")
+    }
+
+    static var photosLoading: String {
+        text(es: "cargando...", en: "loading...")
+    }
+
+    static var photosPermissionDenied: String {
+        text(es: "permiso no concedido: denied", en: "permission not granted: denied")
+    }
+
+    static var photosPermissionRestricted: String {
+        text(es: "permiso restringido", en: "permission restricted")
+    }
+
+    static var photosPermissionLimited: String {
+        text(es: "permiso limitado", en: "permission limited")
+    }
+
+    static var photosPermissionNotDetermined: String {
+        text(es: "falta permiso para leer albumes de fotos", en: "photos access permission required")
+    }
+
+    static var photosPermissionUnknown: String {
+        text(es: "permiso de fotos desconocido", en: "unknown photos permission")
+    }
+
+    static var select: String {
+        text(es: "Seleccionar", en: "Select")
+    }
+
     static var modeProcesses: String {
         text(es: "procesos", en: "processes")
     }

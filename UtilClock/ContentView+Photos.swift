@@ -18,7 +18,7 @@ extension ContentView {
         if photosSelectedFolderPath.isEmpty == false {
             return photosSelectedFolderPath
         }
-        return "-"
+        return L10n.networkNoData
     }
 
     @ViewBuilder
@@ -78,9 +78,9 @@ extension ContentView {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(alignment: .top, spacing: colGap) {
                     HStack(spacing: 10) {
-                        Button(action: toggleAlbumsPanel) { Text("Album Fotos") }
+                        Button(action: toggleAlbumsPanel) { Text(L10n.photosAlbumButton) }
                             .buttonStyle(photosSourceButtonStyle(active: photosShowAlbumsList))
-                        Button(action: choosePhotosFolder) { Text("Carpeta") }
+                        Button(action: choosePhotosFolder) { Text(L10n.photosFolderButton) }
                             .buttonStyle(photosSourceButtonStyle(active: photosSourceType == "folder"))
                     }
                     .padding(.top, 6)
@@ -89,7 +89,7 @@ extension ContentView {
                     VStack(alignment: .trailing, spacing: 8) {
                         HStack(spacing: 10) {
                             Toggle(isOn: $photosShowClock) {
-                                Text("Mostrar reloj")
+                                Text(L10n.photosShowClock)
                                     .font(.system(size: max(14, dateSize * 0.9), weight: .regular, design: .monospaced))
                                     .foregroundStyle(phosphorColor)
                             }
@@ -98,7 +98,7 @@ extension ContentView {
                         }
 
                         HStack(spacing: 10) {
-                            Text("Duracion")
+                            Text(L10n.photosDuration)
                                 .font(.system(size: max(14, dateSize * 0.92), weight: .regular, design: .monospaced))
                                 .foregroundStyle(phosphorDim)
 
@@ -123,7 +123,7 @@ extension ContentView {
                         Text(photosPermissionHintText)
                             .font(.system(size: max(12, dateSize * 0.82), weight: .regular, design: .monospaced))
                             .foregroundStyle(phosphorDim)
-                        Button(action: requestPhotosPermissionFromUI) { Text("Pedir permiso") }
+                        Button(action: requestPhotosPermissionFromUI) { Text(L10n.photosRequestPermission) }
                             .buttonStyle(photosCapsuleButtonStyle(active: false))
                     }
                 }
@@ -132,7 +132,7 @@ extension ContentView {
                     VStack(alignment: .leading, spacing: 6) {
                         if photosShowAlbumsList, photosPermissionStatus == "authorized" || photosPermissionStatus == "limited" {
                             if photosAlbums.isEmpty {
-                                Text("Sin albumes")
+                                Text(L10n.photosNoAlbums)
                                     .font(.system(size: max(13, dateSize * 0.86), weight: .regular, design: .monospaced))
                                     .foregroundStyle(phosphorDim)
                             } else {
@@ -166,7 +166,7 @@ extension ContentView {
                             }
                         } else {
                             HStack(spacing: 8) {
-                                Text("Origen:")
+                                Text("\(L10n.photosSource):")
                                     .font(.system(size: max(13, dateSize * 0.85), weight: .semibold, design: .monospaced))
                                     .foregroundStyle(phosphorDim)
                                 Text(selectedPhotosSourceLabel)
@@ -193,7 +193,7 @@ extension ContentView {
 
                 HStack(alignment: .center, spacing: colGap) {
                     HStack(spacing: 8) {
-                        Text("Fotos:")
+                        Text("\(L10n.photosCount):")
                             .font(.system(size: max(13, dateSize * 0.85), weight: .semibold, design: .monospaced))
                             .foregroundStyle(phosphorDim)
                         Text("\(photosImageURLs.count)")
@@ -220,7 +220,7 @@ extension ContentView {
                 }
 
                 if photosLoading {
-                    Text("Cargando...")
+                    Text(L10n.photosLoading)
                         .font(.system(size: max(12, dateSize * 0.8), weight: .regular, design: .monospaced))
                         .foregroundStyle(phosphorDim)
                 }
@@ -252,15 +252,15 @@ extension ContentView {
     var photosPermissionHintText: String {
         switch photosPermissionStatus {
         case "denied":
-            return "Permiso no concedido: denied"
+            return L10n.photosPermissionDenied
         case "restricted":
-            return "Permiso restringido"
+            return L10n.photosPermissionRestricted
         case "limited":
-            return "Permiso limitado"
+            return L10n.photosPermissionLimited
         case "notDetermined":
-            return "Falta permiso para leer albumes de Fotos"
+            return L10n.photosPermissionNotDetermined
         default:
-            return "Permiso de Fotos desconocido"
+            return L10n.photosPermissionUnknown
         }
     }
 
@@ -366,7 +366,7 @@ extension ContentView {
         panel.canChooseFiles = false
         panel.canCreateDirectories = false
         panel.allowsMultipleSelection = false
-        panel.prompt = "Seleccionar"
+        panel.prompt = L10n.select
         if panel.runModal() == .OK, let url = panel.url {
             photosSourceType = "folder"
             photosSelectedFolderPath = url.path
