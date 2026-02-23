@@ -99,6 +99,10 @@ enum L10n {
         text(es: "apps", en: "apps")
     }
 
+    static var modePhotos: String {
+        text(es: "ver fotos", en: "view photos")
+    }
+
     static var modeProcesses: String {
         text(es: "procesos", en: "processes")
     }

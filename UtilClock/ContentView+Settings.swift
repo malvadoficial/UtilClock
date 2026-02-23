@@ -608,6 +608,8 @@ extension ContentView {
             refreshCPUUsage()
         } else if mode == .apps {
             refreshAppsMonitorData()
+        } else if mode == .photos {
+            refreshPhotosModeIfNeeded()
         } else if mode == .music {
             syncMusicActivation()
         } else if mode == .info {
