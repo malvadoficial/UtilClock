@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.2.5 - 2026-02-23
+
+- Internationalization pass for `Ver Fotos` UI:
+  - Replaced hardcoded visible strings with `L10n` keys.
+  - Localized buttons, labels, permission texts, loading state and picker prompt.
+- Added new localization keys for Photos mode texts in `L10n.swift`.
+
 ## v1.2.4 - 2026-02-23
 
 - Restored and completed `Ver Fotos` mode with integrated slideshow flow.

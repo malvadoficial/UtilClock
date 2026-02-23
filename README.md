@@ -37,17 +37,13 @@ Esta aplicación se ha desarrollado utilizando **Codex de OpenAI** y está pensa
   - Elegir presentación de la app: `Dock` o `Barra de menús`
   - Auto-inicio al iniciar sesión (`ON/OFF`)
 
-## Novedades recientes (v1.2.4)
+## Novedades recientes (v1.2.5)
 
-- `Ver Fotos` restaurado y completado:
-  - Integración con app Fotos (álbumes normales + inteligentes, incluyendo `Favoritas`).
-  - Selección de carpeta o álbum con persistencia entre ejecuciones.
-  - Inicio en fullscreen al pulsar `START`, con reloj opcional sobreimpreso.
-  - Reproducción de imágenes en orden aleatorio (sin repetir consecutivamente).
-  - Layout del launcher reorganizado en dos columnas para mejorar legibilidad.
-- Mejoras de UX en permisos de Fotos:
-  - Solicitud de permiso desde la app.
-  - Apertura rápida de ajustes de privacidad cuando el permiso está denegado.
+- Internacionalización del modo `Ver Fotos`:
+  - Eliminados textos visibles hardcodeados en ese modo.
+  - Nuevas claves `L10n` para botones, etiquetas, estados y mensajes de permiso.
+  - Prompt del selector de carpeta internacionalizado.
+- Ajuste de consistencia de idioma en la UI del launcher de fotos.
 
 ## Capturas
 
