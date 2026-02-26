@@ -82,6 +82,10 @@ extension ContentView {
             froggerView
         case .artillery:
             artilleryView
+        case .backRooms:
+            mazeView
+        case .doom:
+            doomView
         }
     }
 
@@ -111,6 +115,10 @@ extension ContentView {
             return L10n.modeFrogger
         case .artillery:
             return L10n.modeArtillery
+        case .backRooms:
+            return L10n.modeBackRooms
+        case .doom:
+            return L10n.modeDoom
         }
     }
 
@@ -140,6 +148,10 @@ extension ContentView {
             return "leaf.fill"
         case .artillery:
             return "scope"
+        case .backRooms:
+            return "eye.fill"
+        case .doom:
+            return "flame.fill"
         }
     }
 
@@ -193,6 +205,10 @@ extension ContentView {
             return froggerScore
         case .artillery:
             return artilleryScore
+        case .backRooms:
+            return mazeScore
+        case .doom:
+            return 0
         }
     }
 
@@ -334,6 +350,18 @@ extension ContentView {
             activateArtilleryMode()
         } else {
             deactivateArtilleryMode()
+        }
+
+        if isGameActive(.backRooms) {
+            activateMazeMode()
+        } else {
+            deactivateMazeMode()
+        }
+
+        if isGameActive(.doom) {
+            activateDoomMode()
+        } else {
+            deactivateDoomMode()
         }
     }
 
@@ -4404,5 +4432,446 @@ extension ContentView {
         return s >= 0 && t >= 0 && (s + t) <= 1
     }
 
+    // MARK: - Back Rooms Raycaster
+
+    // Paleta cromática Back Rooms – tonos verdes
+    private static let brWall    = Color(red: 0.529, green: 0.722, blue: 0.478) // verde pared
+    private static let brWallSide = Color(red: 0.404, green: 0.565, blue: 0.298) // lateral más oscuro
+    private static let brCeil    = Color(red: 0.784, green: 0.910, blue: 0.722) // techo verde pálido
+    private static let brFloor   = Color(red: 0.094, green: 0.157, blue: 0.063) // suelo verde muy oscuro
+    private static let brFog     = Color(red: 0.529, green: 0.722, blue: 0.478) // niebla verde lejana
+
+    var mazeView: some View {
+        GeometryReader { _ in
+            ZStack {
+                // Fondo = color de niebla (paredes muy lejanas se funden aquí)
+                ContentView.brFog
+
+                Canvas { context, size in
+                    guard !mazeMap.isEmpty else { return }
+                    let W = Int(size.width)
+                    let H = Int(size.height)
+                    guard W > 0, H > 0 else { return }
+
+                    let posX = mazePlayerX
+                    let posY = mazePlayerY
+                    let angle = mazePlayerAngle
+                    let map  = mazeMap
+                    let fH = Double(H), fW = Double(W)
+                    let mapW = map[0].count, mapH = map.count
+                    let colStep = 2
+
+                    // Techo y suelo como bloques sólidos (más eficiente)
+                    let halfH = CGFloat(H) / 2
+                    context.fill(Path(CGRect(x: 0, y: 0,      width: size.width, height: halfH)),
+                                 with: .color(ContentView.brCeil))
+                    context.fill(Path(CGRect(x: 0, y: halfH,  width: size.width, height: halfH)),
+                                 with: .color(ContentView.brFloor))
+
+                    let dirX = cos(angle), dirY = sin(angle)
+                    let planeX = -sin(angle) * 0.66, planeY = cos(angle) * 0.66
+
+                    for col in stride(from: 0, to: W, by: colStep) {
+                        let cameraX = 2.0 * Double(col) / fW - 1.0
+                        let rayDirX = dirX + planeX * cameraX
+                        let rayDirY = dirY + planeY * cameraX
+
+                        var mapX = Int(posX), mapY = Int(posY)
+                        let deltaDistX = rayDirX == 0 ? Double.infinity : abs(1.0 / rayDirX)
+                        let deltaDistY = rayDirY == 0 ? Double.infinity : abs(1.0 / rayDirY)
+
+                        let stepX: Int; var sideDistX: Double
+                        if rayDirX < 0 { stepX = -1; sideDistX = (posX - Double(mapX)) * deltaDistX }
+                        else           { stepX =  1; sideDistX = (Double(mapX + 1) - posX) * deltaDistX }
+                        let stepY: Int; var sideDistY: Double
+                        if rayDirY < 0 { stepY = -1; sideDistY = (posY - Double(mapY)) * deltaDistY }
+                        else           { stepY =  1; sideDistY = (Double(mapY + 1) - posY) * deltaDistY }
+
+                        var side = 0
+                        for _ in 0..<128 {
+                            if sideDistX < sideDistY { sideDistX += deltaDistX; mapX += stepX; side = 0 }
+                            else                     { sideDistY += deltaDistY; mapY += stepY; side = 1 }
+                            let wx = ((mapX % mapW) + mapW) % mapW
+                            let wy = ((mapY % mapH) + mapH) % mapH
+                            if map[wy][wx] > 0 { break }
+                        }
+
+                        let perpWallDist = max(0.001, side == 0 ? sideDistX - deltaDistX : sideDistY - deltaDistY)
+                        let lineHeight = fH / perpWallDist
+                        let drawStart = max(0.0, fH / 2 - lineHeight / 2)
+                        let drawEnd   = min(fH,  fH / 2 + lineHeight / 2)
+
+                        // Fog: interpolación hacia el color de niebla según distancia
+                        let fog = min(1.0, perpWallDist * 0.10)
+                        let baseColor = side == 1 ? ContentView.brWallSide : ContentView.brWall
+                        // Resolver componentes RGB para la mezcla con niebla
+                        let fogR = 0.529, fogG = 0.722, fogB = 0.478
+                        let (wr, wg, wb): (Double, Double, Double) = side == 1
+                            ? (0.404, 0.565, 0.298)
+                            : (0.529, 0.722, 0.478)
+                        let r = wr * (1 - fog) + fogR * fog
+                        let g = wg * (1 - fog) + fogG * fog
+                        let b = wb * (1 - fog) + fogB * fog
+                        let _ = baseColor  // suppress unused warning
+
+                        let x = CGFloat(col), w = CGFloat(colStep)
+                        context.fill(
+                            Path(CGRect(x: x, y: drawStart, width: w, height: drawEnd - drawStart)),
+                            with: .color(Color(red: r, green: g, blue: b))
+                        )
+                    }
+                }
+
+                // Crosshair tenue
+                VStack(spacing: 0) {
+                    Spacer()
+                    ZStack {
+                        Rectangle().fill(Color(red: 0.3, green: 0.28, blue: 0.1).opacity(0.7)).frame(width: 12, height: 1)
+                        Rectangle().fill(Color(red: 0.3, green: 0.28, blue: 0.1).opacity(0.7)).frame(width: 1, height: 12)
+                    }
+                    Spacer()
+                }
+
+                // HUD mínimo con estética Back Rooms
+                VStack {
+                    HStack {
+                        Text("BACKROOMS")
+                            .font(.system(size: 12, weight: .bold, design: .monospaced))
+                            .foregroundStyle(Color(red: 0.4, green: 0.38, blue: 0.15).opacity(0.8))
+                        Spacer()
+                        Text("WASD  ←↑↓→")
+                            .font(.system(size: 10, weight: .regular, design: .monospaced))
+                            .foregroundStyle(Color(red: 0.4, green: 0.38, blue: 0.15).opacity(0.5))
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.top, 10)
+                    Spacer()
+                }
+            }
+        }
+    }
+
+    func activateMazeMode() {
+        if mazeMap.isEmpty { resetMazeMap() }
+        installMazeKeyboardMonitorIfNeeded()
+        startMazeTimerIfNeeded()
+    }
+
+    func deactivateMazeMode() {
+        mazeGameTimer?.setEventHandler {}
+        mazeGameTimer?.cancel()
+        mazeGameTimer = nil
+        if let monitor = mazeKeyboardMonitor {
+            NSEvent.removeMonitor(monitor)
+            mazeKeyboardMonitor = nil
+        }
+        mazeMoveForward = false; mazeMoveBackward = false
+        mazeTurnLeft = false;    mazeTurnRight = false
+    }
+
+    func resetMazeMap() {
+        let gridSize = 63
+        var grid = [[Int]](repeating: [Int](repeating: 1, count: gridSize), count: gridSize)
+        var rng = SystemRandomNumberGenerator()
+
+        // Fase 1: recursive backtracker — red de pasillos conectados
+        let cells = (gridSize - 1) / 2  // 31×31
+        var visited = [[Bool]](repeating: [Bool](repeating: false, count: cells), count: cells)
+        let startCR = cells / 2, startCC = cells / 2
+        visited[startCR][startCC] = true
+        grid[startCR * 2 + 1][startCC * 2 + 1] = 0
+        var stack: [(Int, Int)] = [(startCR, startCC)]
+        let dirs = [(0, -1), (0, 1), (-1, 0), (1, 0)]
+        while !stack.isEmpty {
+            let (cr, cc) = stack.last!
+            var nbrs: [(Int, Int)] = []
+            for (dr, dc) in dirs {
+                let nr = cr + dr, nc = cc + dc
+                if nr >= 0, nr < cells, nc >= 0, nc < cells, !visited[nr][nc] { nbrs.append((nr, nc)) }
+            }
+            if nbrs.isEmpty {
+                stack.removeLast()
+            } else {
+                let (nr, nc) = nbrs.randomElement(using: &rng)!
+                visited[nr][nc] = true
+                grid[(cr * 2 + 1 + nr * 2 + 1) / 2][(cc * 2 + 1 + nc * 2 + 1) / 2] = 0
+                grid[nr * 2 + 1][nc * 2 + 1] = 0
+                stack.append((nr, nc))
+            }
+        }
+
+        // Fase 2: ensanchar pasillos y crear espacios abiertos
+        // Cualquier pared interior con ≥2 vecinos abiertos tiene 35% de
+        // probabilidad de eliminarse → pasillos dobles, ensanchamientos, atajos
+        for row in 1..<(gridSize - 1) {
+            for col in 1..<(gridSize - 1) {
+                guard grid[row][col] == 1 else { continue }
+                let open = [(row-1,col),(row+1,col),(row,col-1),(row,col+1)]
+                    .filter { p in p.0 > 0 && p.0 < gridSize-1 && p.1 > 0 && p.1 < gridSize-1 && grid[p.0][p.1] == 0 }
+                    .count
+                if open >= 2, Int.random(in: 0..<3, using: &rng) == 0 {
+                    grid[row][col] = 0
+                }
+            }
+        }
+
+        // Fase 3: habitaciones rectangulares (algunas sin salida, otras abiertas)
+        for _ in 0..<14 {
+            let rw = Int.random(in: 4...10, using: &rng)
+            let rh = Int.random(in: 4...8,  using: &rng)
+            let r0 = Int.random(in: 1...(gridSize - rh - 1), using: &rng)
+            let c0 = Int.random(in: 1...(gridSize - rw - 1), using: &rng)
+            for r in r0..<(r0 + rh) {
+                for c in c0..<(c0 + rw) { grid[r][c] = 0 }
+            }
+        }
+
+        // Fase 4: restaurar bordes
+        for i in 0..<gridSize {
+            grid[0][i] = 1; grid[gridSize-1][i] = 1
+            grid[i][0] = 1; grid[i][gridSize-1] = 1
+        }
+
+        mazeMap = grid
+        mazePlayerX = Double(startCC * 2 + 1) + 0.5
+        mazePlayerY = Double(startCR * 2 + 1) + 0.5
+        mazePlayerAngle = 0.0
+    }
+
+    func installMazeKeyboardMonitorIfNeeded() {
+        guard mazeKeyboardMonitor == nil else { return }
+        mazeKeyboardMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp]) { [self] event in
+            guard isGameActive(.backRooms) else { return event }
+            let pressed = event.type == .keyDown
+            switch event.keyCode {
+            case 13, 126: mazeMoveForward  = pressed; return nil  // W, ↑
+            case 1,  125: mazeMoveBackward = pressed; return nil  // S, ↓
+            case 0,  123: mazeTurnLeft     = pressed; return nil  // A, ←
+            case 2,  124: mazeTurnRight    = pressed; return nil  // D, →
+            default: return event
+            }
+        }
+    }
+
+    func startMazeTimerIfNeeded() {
+        guard mazeGameTimer == nil else { return }
+        let timer = DispatchSource.makeTimerSource(queue: .main)
+        timer.schedule(deadline: .now(), repeating: .milliseconds(16), leeway: .milliseconds(2))
+        timer.setEventHandler { updateMazeFrame() }
+        timer.resume()
+        mazeGameTimer = timer
+    }
+
+    func updateMazeFrame() {
+        let moveSpeed = 0.06
+        let rotSpeed  = 0.04
+        let angle = mazePlayerAngle
+        let dx = cos(angle) * moveSpeed
+        let dy = sin(angle) * moveSpeed
+
+        if mazeMoveForward {
+            if mazeCellEmpty(x: mazePlayerX + dx, y: mazePlayerY)      { mazePlayerX += dx }
+            if mazeCellEmpty(x: mazePlayerX,      y: mazePlayerY + dy) { mazePlayerY += dy }
+        }
+        if mazeMoveBackward {
+            if mazeCellEmpty(x: mazePlayerX - dx, y: mazePlayerY)      { mazePlayerX -= dx }
+            if mazeCellEmpty(x: mazePlayerX,      y: mazePlayerY - dy) { mazePlayerY -= dy }
+        }
+        if mazeTurnLeft  { mazePlayerAngle -= rotSpeed }
+        if mazeTurnRight { mazePlayerAngle += rotSpeed }
+
+        // Wrap position so the maze feels infinite
+        if !mazeMap.isEmpty {
+            let mw = Double(mazeMap[0].count), mh = Double(mazeMap.count)
+            mazePlayerX = (mazePlayerX.truncatingRemainder(dividingBy: mw) + mw).truncatingRemainder(dividingBy: mw)
+            mazePlayerY = (mazePlayerY.truncatingRemainder(dividingBy: mh) + mh).truncatingRemainder(dividingBy: mh)
+        }
+    }
+
+    func mazeCellEmpty(x: Double, y: Double) -> Bool {
+        guard !mazeMap.isEmpty else { return false }
+        let h = mazeMap.count, w = mazeMap[0].count
+        let col = ((Int(x) % w) + w) % w
+        let row = ((Int(y) % h) + h) % h
+        return mazeMap[row][col] == 0
+    }
+
+    // MARK: - Doom Launcher
+
+    var doomView: some View {
+        let binary = findChocolateDoom()
+        let allWads: [(title: String, file: String)] = [
+            ("DOOM",     "doom1"),
+            ("DOOM II",  "doom2"),
+            ("DOOM III", "doom3"),
+            ("PLUTONIA", "plutonia"),
+            ("TNT",      "tnt"),
+        ]
+        let availableWads = allWads.filter {
+            Bundle.main.url(forResource: $0.file, withExtension: "wad") != nil
+        }
+
+        return GeometryReader { _ in
+            ZStack {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(Color.black.opacity(0.35))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .stroke(phosphorColor.opacity(0.45), lineWidth: 1)
+                    )
+
+                VStack(spacing: 28) {
+                    Text("DOOM")
+                        .font(.system(size: 52, weight: .black, design: .monospaced))
+                        .foregroundStyle(phosphorColor)
+                        .shadow(color: phosphorColor.opacity(0.6), radius: 18)
+
+                    if binary == nil {
+                        VStack(spacing: 10) {
+                            Text("Chocolate Doom no encontrado")
+                                .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                                .foregroundStyle(phosphorColor.opacity(0.7))
+                            Text("brew install chocolate-doom")
+                                .font(.system(size: 12, weight: .regular, design: .monospaced))
+                                .foregroundStyle(phosphorColor)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 7)
+                                .background(phosphorColor.opacity(0.12))
+                                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                        }
+                    } else if doomIsRunning {
+                        VStack(spacing: 12) {
+                            Text("En ejecución…")
+                                .font(.system(size: 13, weight: .regular, design: .monospaced))
+                                .foregroundStyle(phosphorColor.opacity(0.6))
+                            Button(action: { stopDoom() }) {
+                                Text("Detener")
+                                    .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                                    .foregroundStyle(phosphorColor)
+                                    .padding(.horizontal, 20)
+                                    .padding(.vertical, 8)
+                                    .background(phosphorColor.opacity(0.15))
+                                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                            .stroke(phosphorColor.opacity(0.4), lineWidth: 1)
+                                    )
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    } else if availableWads.isEmpty {
+                        Text("No se encontró ningún WAD en el bundle")
+                            .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(phosphorColor.opacity(0.7))
+                    } else {
+                        VStack(spacing: 10) {
+                            ForEach(availableWads, id: \.file) { wad in
+                                Button(action: {
+                                    if let url = Bundle.main.url(forResource: wad.file, withExtension: "wad") {
+                                        launchDoom(binary: binary!, wad: url)
+                                    }
+                                }) {
+                                    Text(wad.title)
+                                        .font(.system(size: 14, weight: .bold, design: .monospaced))
+                                        .foregroundStyle(Color.black)
+                                        .frame(width: 200)
+                                        .padding(.vertical, 9)
+                                        .background(phosphorColor)
+                                        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    func findChocolateDoom() -> String? {
+        let candidates = ["/opt/homebrew/bin/chocolate-doom", "/usr/local/bin/chocolate-doom"]
+        return candidates.first { FileManager.default.isExecutableFile(atPath: $0) }
+    }
+
+    func launchDoom(binary: String, wad: URL) {
+        let sdlIdx = doomSDLDisplayIndex()
+        writeDoomConfig(sdlIdx)
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: binary)
+        process.arguments = ["-iwad", wad.path, "-fullscreen"]
+        process.terminationHandler = { _ in
+            DispatchQueue.main.async {
+                self.doomIsRunning = false
+                self.doomProcess = nil
+            }
+        }
+        try? process.run()
+        doomProcess = process
+        doomIsRunning = true
+    }
+
+    func writeDoomConfig(_ idx: Int) {
+        let fm = FileManager.default
+        let configDir = fm.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/chocolate-doom")
+        let configFile = configDir.appendingPathComponent("chocolate-doom.cfg")
+
+        var lines: [String]
+        if let content = try? String(contentsOf: configFile, encoding: .utf8) {
+            lines = content.components(separatedBy: "\n")
+        } else {
+            lines = []
+        }
+
+        // Update or add video_display and key_fire
+        var foundDisplay = false
+        var foundFire = false
+        lines = lines.map { line in
+            if line.hasPrefix("video_display ") { foundDisplay = true; return "video_display \(idx)" }
+            if line.hasPrefix("key_fire ")      { foundFire    = true; return "key_fire 122" }  // Z key
+            return line
+        }
+        if !foundDisplay { lines.append("video_display \(idx)") }
+        if !foundFire    { lines.append("key_fire 122") }
+
+        try? fm.createDirectory(at: configDir, withIntermediateDirectories: true)
+        try? lines.joined(separator: "\n").write(to: configFile, atomically: true, encoding: .utf8)
+    }
+
+    func stopDoom() {
+        doomProcess?.terminate()
+        doomProcess = nil
+        doomIsRunning = false
+    }
+
+    /// Devuelve el índice SDL del monitor donde está UtilClock.
+    /// SDL usa el mismo orden que CGGetActiveDisplayList.
+    func doomSDLDisplayIndex() -> Int {
+        guard let window = NSApp.windows.first(where: { $0.isVisible && !$0.isMiniaturized }),
+              let screen = window.screen,
+              let targetID = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID
+        else { return 0 }
+
+        var count: UInt32 = 0
+        CGGetActiveDisplayList(0, nil, &count)
+        var displays = [CGDirectDisplayID](repeating: 0, count: Int(count))
+        CGGetActiveDisplayList(count, &displays, &count)
+        return displays.firstIndex(of: targetID) ?? 0
+    }
+
+    func warpMouseToDoomScreen() {
+        guard let window = NSApp.windows.first(where: { $0.isVisible && !$0.isMiniaturized }),
+              let screen = window.screen,
+              let displayID = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID
+        else { return }
+        let bounds = CGDisplayBounds(displayID)
+        CGWarpMouseCursorPosition(CGPoint(x: bounds.midX, y: bounds.midY))
+    }
+
+    func activateDoomMode() {}
+
+    func deactivateDoomMode() {
+        stopDoom()
+    }
 
 }

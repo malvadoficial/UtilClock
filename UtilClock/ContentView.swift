@@ -44,6 +44,7 @@ struct ContentView: View {
         case stopwatch
         case countdown
         case alarm
+        case fullClock
 
         var key: String {
             switch self {
@@ -55,6 +56,7 @@ struct ContentView: View {
             case .stopwatch: return "stopwatch"
             case .countdown: return "countdown"
             case .alarm: return "alarm"
+            case .fullClock: return "fullClock"
             }
         }
 
@@ -67,13 +69,14 @@ struct ContentView: View {
             case .uptime: return .stopwatch
             case .stopwatch: return .countdown
             case .countdown: return .alarm
-            case .alarm: return .clock
+            case .alarm: return .fullClock
+            case .fullClock: return .clock
             }
         }
 
         var previous: TopClockMode {
             switch self {
-            case .clock: return .alarm
+            case .clock: return .fullClock
             case .worldClock: return .clock
             case .calendar: return .worldClock
             case .weather: return .calendar
@@ -81,6 +84,7 @@ struct ContentView: View {
             case .stopwatch: return .uptime
             case .countdown: return .stopwatch
             case .alarm: return .countdown
+            case .fullClock: return .alarm
             }
         }
     }
@@ -95,6 +99,8 @@ struct ContentView: View {
         case music
         case games
         case info
+        case teleprompter
+        case videos
 
         var key: String {
             switch self {
@@ -107,6 +113,8 @@ struct ContentView: View {
             case .music: return "music"
             case .games: return "games"
             case .info: return "info"
+            case .teleprompter: return "teleprompter"
+            case .videos: return "videos"
             }
         }
 
@@ -120,13 +128,15 @@ struct ContentView: View {
             case .photos: return .music
             case .music: return .games
             case .games: return .info
-            case .info: return .audio
+            case .info: return .teleprompter
+            case .teleprompter: return .videos
+            case .videos: return .audio
             }
         }
 
         var previous: UtilityMode {
             switch self {
-            case .audio: return .info
+            case .audio: return .videos
             case .storage: return .audio
             case .network: return .storage
             case .cpu: return .network
@@ -135,6 +145,8 @@ struct ContentView: View {
             case .music: return .photos
             case .games: return .music
             case .info: return .games
+            case .teleprompter: return .info
+            case .videos: return .teleprompter
             }
         }
     }
@@ -149,6 +161,7 @@ struct ContentView: View {
         case chordFinder
         case chordDetect
         case metronome
+        case tapTempo
     }
 
     enum InfoMode: String, CaseIterable, Hashable {
@@ -170,6 +183,8 @@ struct ContentView: View {
         case pacman
         case frogger
         case artillery
+        case backRooms = "maze"
+        case doom
     }
 
     enum SplitFullscreenTarget: Hashable {
@@ -512,6 +527,10 @@ struct ContentView: View {
     @State var metronomeBeatIndex = 0
     @State var metronomeNumerator = 4
     @State var metronomeDenominator = 4
+    @State var tapTempoTaps: [Date] = []
+    @State var tapTempoBPM: Double = 0
+    @State var tapTempoResetTimer: Timer?
+    @State var tapTempoPulseActive = false
     @State var chordInput = "Am"
     @State var chordVoicingIndex = 0
     @State var parsedChord: ParsedChord?
@@ -734,6 +753,19 @@ struct ContentView: View {
     @State var artilleryMountains: [ArtilleryMountain] = []
     @State var artilleryTimer: DispatchSourceTimer?
     @State var artilleryKeyboardMonitor: Any?
+    @State var mazePlayerX: Double = 8.0
+    @State var mazePlayerY: Double = 8.0
+    @State var mazePlayerAngle: Double = 0.0
+    @State var mazeMap: [[Int]] = []
+    @State var mazeGameTimer: DispatchSourceTimer?
+    @State var mazeMoveForward = false
+    @State var mazeMoveBackward = false
+    @State var mazeTurnLeft = false
+    @State var mazeTurnRight = false
+    @State var mazeScore = 0
+    @State var mazeKeyboardMonitor: Any?
+    @State var doomProcess: Process?
+    @State var doomIsRunning = false
     @State var missileRunning = false
     @State var missileGameOver = false
     @State var missileScore = 0
@@ -763,6 +795,43 @@ struct ContentView: View {
     @State var raeSearchText = ""
     @State var raeResultLines: [String] = []
     @State var raeSearchRequestID = 0
+    
+    // Teleprompter state
+    @State var teleprompterText: NSAttributedString = NSAttributedString(string: "")
+    @State var teleprompterScrollOffset: CGFloat = 0
+    @State var teleprompterIsPlaying = false
+    @State var teleprompterSpeed: Double = 30.0 // pixels per second
+    @State var teleprompterTimer: Timer?
+    @State var teleprompterLoadedFileName = ""
+    @State var teleprompterFullscreen = false
+    // Videos mode
+    @State var videosSelectedFolderPath = ""
+    @State var videosSelectedFolderBookmark: Data?
+    @State var videosVideoURLs: [URL] = []
+    @State var videosAlbumAssetIDs: [String] = []
+    @State var videosCurrentIndex = 0
+    @State var videosIsRunning = false
+    @State var videosSoundEnabled = true
+    @State var videosShuffle = true
+    @State var videosSourceType = "folder"
+    @State var videosSelectedAlbumID = ""
+    @State var videosSelectedAlbumName = ""
+    @State var videosAlbums: [PhotosAlbum] = []
+    @State var videosShowAlbumsList = false
+    @State var videosPermissionStatus = "unknown"
+    @State var videosLoading = false
+    @State var videosStartWhenReady = false
+    @State var videosPlayer: AVPlayer?
+    @State var videosIsPlaying = false
+    @State var videosShowControls = false
+    @State var videosKeyboardMonitor: Any?
+    @State var videosFolderScopedURL: URL?
+    @State var videosCurrentTitle = ""
+    @State var videosTitleVisible = false
+    @State var videosTitleTimer: Timer?
+    @State var videosProgress: Double = 0
+    @State var videosTimeObserver: Any?
+    @State var videosIsSeeking = false
     #endif
 
     var body: some View {
@@ -812,6 +881,8 @@ struct ContentView: View {
                             topCalendarView(dateSize: dateSize)
                         } else if topMode == .weather {
                             topWeatherView(dateSize: dateSize, driveTitleSize: driveTitleSize)
+                        } else if topMode == .fullClock {
+                            fullClockView(dateSize: dateSize, mainClockSize: mainClockSize, secondsSize: secondsSize, driveTitleSize: driveTitleSize)
                         } else if topMode == .stopwatch {
                             TimelineView(.periodic(from: .now, by: 0.01)) { context in
                                 let stopwatchDisplay = stopwatchDisplayValues(at: context.date)
@@ -1050,8 +1121,8 @@ struct ContentView: View {
                                 .offset(y: 10)
                         }
                     }
-                    .minimumScaleFactor((topMode == .calendar || topMode == .weather) ? 1 : 0.5)
-                    .lineLimit((topMode == .calendar || topMode == .weather) ? nil : 1)
+                    .minimumScaleFactor((topMode == .calendar || topMode == .weather || topMode == .fullClock) ? 1 : 0.5)
+                    .lineLimit((topMode == .calendar || topMode == .weather || topMode == .fullClock) ? nil : 1)
                     .padding(.horizontal, 12)
                     .padding(.top, 12)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -1377,6 +1448,73 @@ struct ContentView: View {
                                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
                             }
                             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                        } else if isMusicActive(.tapTempo) {
+                            HStack(alignment: .center, spacing: 28) {
+                                // Círculo a la izquierda
+                                ZStack {
+                                    Circle()
+                                        .fill(tapTempoPulseActive ? phosphorColor.opacity(0.22) : Color(red: 0.06, green: 0.15, blue: 0.09))
+                                    Circle()
+                                        .stroke(phosphorColor.opacity(0.65), lineWidth: 2)
+                                }
+                                .frame(width: topHalfHeight * 0.75, height: topHalfHeight * 0.75)
+                                .shadow(color: phosphorColor.opacity(tapTempoPulseActive ? 0.55 : 0.18), radius: 12)
+
+                                // Controles a la derecha
+                                VStack(spacing: 12) {
+                                    Text("BPM")
+                                        .font(.system(size: max(14, dateSize * 1.05), weight: .medium, design: .monospaced))
+                                        .foregroundStyle(phosphorDim)
+
+                                    Text(tapTempoBPM > 0 ? String(format: "%.1f", tapTempoBPM) : "---")
+                                        .font(displayFont(size: max(44, driveTitleSize * 1.55), weight: .bold))
+                                        .foregroundStyle(phosphorColor)
+                                        .monospacedDigit()
+                                        .frame(minWidth: 140, minHeight: 52)
+
+                                    Button(action: {
+                                        registerTapTempoTap()
+                                    }) {
+                                        Text(L10n.tapTempoTap)
+                                            .font(displayFont(size: max(20, dateSize * 1.45), weight: .regular))
+                                            .foregroundStyle(phosphorColor)
+                                            .lineLimit(1)
+                                            .minimumScaleFactor(0.8)
+                                            .frame(width: 190)
+                                            .padding(.vertical, 10)
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                                    .stroke(phosphorColor.opacity(0.5), lineWidth: 1)
+                                            )
+                                    }
+                                    .buttonStyle(PressableCountdownButtonStyle(phosphorColor: phosphorColor))
+                                    .keyboardShortcut(.space, modifiers: [])
+
+                                    Button(action: {
+                                        resetTapTempo()
+                                    }) {
+                                        Text(L10n.reset)
+                                            .font(.system(size: max(15, dateSize * 1.08), weight: .regular, design: .monospaced))
+                                            .foregroundStyle(phosphorDim)
+                                            .lineLimit(1)
+                                            .minimumScaleFactor(0.8)
+                                            .frame(width: 190)
+                                            .padding(.vertical, 8)
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                                    .stroke(phosphorDim.opacity(0.4), lineWidth: 1)
+                                            )
+                                    }
+                                    .buttonStyle(PressableCountdownButtonStyle(phosphorColor: phosphorColor))
+
+                                    // Espacio reservado para el contador de taps (siempre visible)
+                                    Text(tapTempoTaps.count > 0 ? "\(tapTempoTaps.count) \(tapTempoTaps.count == 1 ? L10n.tapTempoTapSingular : L10n.tapTempoTapPlural)" : " ")
+                                        .font(.system(size: max(13, dateSize * 0.92), weight: .regular, design: .monospaced))
+                                        .foregroundStyle(tapTempoTaps.count > 0 ? phosphorDim : Color.clear)
+                                        .frame(minHeight: 18)
+                                }
+                            }
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
                         } else if utilityMode == .games {
                             gamesView
                                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
@@ -1392,6 +1530,9 @@ struct ContentView: View {
                         } else if isInfoActive(.rae) {
                             raeView
                                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                        } else if utilityMode == .teleprompter {
+                            teleprompterView
+                                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
                         } else if utilityMode == .cpu {
                             cpuUtilityView(dateSize: dateSize, driveTitleSize: driveTitleSize)
                         } else if utilityMode == .apps {
@@ -1402,6 +1543,8 @@ struct ContentView: View {
                             storageUtilityView(rowFontSize: driveTitleSize)
                         } else if utilityMode == .photos {
                             photosUtilityView(dateSize: dateSize)
+                        } else if utilityMode == .videos {
+                            videosUtilityView(dateSize: dateSize)
                         }
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -1516,7 +1659,8 @@ struct ContentView: View {
                         (utilityMode == .music && selectedMusicMode != nil) ||
                         (utilityMode == .games && selectedGameMode != nil) ||
                         (utilityMode == .info && selectedInfoMode != nil) ||
-                        (utilityMode == .photos && photosIsRunning && splitFullscreenTarget == .bottom)
+                        (utilityMode == .photos && photosIsRunning && splitFullscreenTarget == .bottom) ||
+                        (utilityMode == .videos && videosIsRunning && splitFullscreenTarget == .bottom)
                     if hideUtilityTagInAggregatedSubmode == false {
                     modeSelectorTag(
                         utilityModeLabel,
@@ -1586,6 +1730,7 @@ struct ContentView: View {
             syncInfoActivation()
             refreshWeatherDataIfNeeded(force: true)
             loadPhotoModeSettings()
+            loadVideoModeSettings()
         }
         .onChange(of: usbMonitor.volumes.map(\.id)) { _, ids in
             let newIDs = Set(ids)
@@ -1605,7 +1750,7 @@ struct ContentView: View {
             tickScheduledAlarm(now: viewModel.now)
         }
         .onChange(of: topMode) { _, newMode in
-            if newMode == .weather {
+            if newMode == .weather || newMode == .fullClock {
                 refreshWeatherDataIfNeeded(force: true)
             }
         }
@@ -1626,7 +1771,9 @@ struct ContentView: View {
             if newMode != .photos {
                 stopPhotosSlideshow()
             }
-
+            if newMode != .videos {
+                stopVideosPlayback()
+            }
         }
         .simultaneousGesture(
             TapGesture().onEnded {
@@ -1647,6 +1794,9 @@ struct ContentView: View {
             cancelStopwatchPrestartCountdown()
             stopMetronome()
             tunerEngine.stop()
+            #if os(macOS)
+            deactivateTapTempoMode()
+            #endif
             deactivatePongMode()
             deactivateArkanoidMode()
             deactivateMissileCommandMode()
@@ -1661,6 +1811,9 @@ struct ContentView: View {
             deactivateArtilleryMode()
             deactivateTodayInHistoryMode()
             deactivateMusicThoughtMode()
+            #if os(macOS)
+            deactivateTeleprompterMode()
+            #endif
             stopHousekeepingTimer()
             stopPhotosSlideshow()
         }
@@ -1732,6 +1885,8 @@ struct ContentView: View {
             return viewModel.hourMinuteText
         case .weather:
             return viewModel.hourMinuteText
+        case .fullClock:
+            return viewModel.hourMinuteText
         case .uptime:
             return uptimeText.hourMinute
         case .stopwatch:
@@ -1761,6 +1916,8 @@ struct ContentView: View {
         case .calendar:
             return false
         case .weather:
+            return false
+        case .fullClock:
             return false
         case .stopwatch:
             return stopwatchRunning
@@ -1803,6 +1960,8 @@ struct ContentView: View {
             return L10n.modeCountdown
         case .alarm:
             return L10n.modeAlarm
+        case .fullClock:
+            return L10n.modeFullClock
         }
     }
 
@@ -1826,6 +1985,10 @@ struct ContentView: View {
             return L10n.modeGames
         case .info:
             return L10n.modeInfo
+        case .teleprompter:
+            return L10n.modeTeleprompter
+        case .videos:
+            return L10n.modeVideos
         }
     }
 
@@ -2876,11 +3039,8 @@ struct WindowReader: NSViewRepresentable {
         }
         return view
     }
-
+    
     func updateNSView(_ nsView: NSView, context: Context) {
-        DispatchQueue.main.async {
-            self.window = nsView.window
-        }
     }
 }
 #endif

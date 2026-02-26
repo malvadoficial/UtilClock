@@ -97,12 +97,12 @@ extension ContentView {
                     ForEach(rotatingTodayInHistoryEvents) { event in
                         HStack(alignment: .top, spacing: 10) {
                             Text("\(event.year)")
-                                .font(displayFont(size: 18, weight: .bold))
+                                .font(displayFont(size: 24, weight: .bold))
                                 .foregroundStyle(phosphorColor)
                                 .frame(width: 84, alignment: .leading)
 
                             Text(localizedThisDayText(event))
-                                .font(.system(size: 17, weight: .regular, design: .monospaced))
+                                .font(.system(size: 28, weight: .regular, design: .monospaced))
                                 .foregroundStyle(phosphorDim)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
@@ -131,7 +131,7 @@ extension ContentView {
         VStack(alignment: .leading, spacing: 14) {
             if musicThoughtLoading && musicThoughtQuotes.isEmpty {
                 Text(isSpanishLanguage ? "cargando frases..." : "loading thoughts...")
-                    .font(.system(size: 14, weight: .regular, design: .monospaced))
+                    .font(.system(size: 18, weight: .regular, design: .monospaced))
                     .foregroundStyle(phosphorDim)
                     .padding(.horizontal, 18)
                     .padding(.top, 56)
@@ -141,12 +141,12 @@ extension ContentView {
                 ScrollView(showsIndicators: false) {
                     VStack(alignment: .leading, spacing: 12) {
                         Text("\"\(quote.quote)\"")
-                            .font(.system(size: 22, weight: .medium, design: .monospaced))
+                            .font(.system(size: 30, weight: .medium, design: .monospaced))
                             .foregroundStyle(phosphorColor)
                             .fixedSize(horizontal: false, vertical: true)
 
                         Text(quote.author)
-                            .font(displayFont(size: 20, weight: .bold))
+                            .font(displayFont(size: 21, weight: .bold))
                             .foregroundStyle(phosphorDim)
                             .lineLimit(2)
                     }

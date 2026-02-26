@@ -128,7 +128,7 @@ extension ContentView {
                         Divider()
                             .background(phosphorDim.opacity(0.4))
                             .padding(.vertical, 6)
-
+/*
                         Text("Presentacion app / App presentation")
                             .font(.system(size: 20, weight: .semibold, design: .monospaced))
                             .foregroundStyle(phosphorDim)
@@ -210,7 +210,7 @@ extension ContentView {
                         Divider()
                             .background(phosphorDim.opacity(0.4))
                             .padding(.vertical, 6)
-
+*/
                         Text("Pantalla superior / Top screen")
                             .font(.system(size: 20, weight: .semibold, design: .monospaced))
                             .foregroundStyle(phosphorDim)
@@ -236,6 +236,7 @@ extension ContentView {
                                             .foregroundStyle(enabledTopModes.contains(mode) ? phosphorColor : phosphorDim)
                                     }
                                     .buttonStyle(.plain)
+                                    
                                     Text(topModeLabel(for: mode))
                                         .font(.system(size: 18, weight: .regular, design: .monospaced))
                                         .foregroundStyle(phosphorColor)
@@ -610,6 +611,8 @@ extension ContentView {
             refreshAppsMonitorData()
         } else if mode == .photos {
             refreshPhotosModeIfNeeded()
+        } else if mode == .videos {
+            refreshVideosModeIfNeeded()
         } else if mode == .music {
             syncMusicActivation()
         } else if mode == .info {
@@ -953,3 +956,4 @@ extension ContentView {
     }
     #endif
 }
+
