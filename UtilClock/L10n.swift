@@ -75,6 +75,10 @@ enum L10n {
         text(es: "alarma", en: "alarm")
     }
 
+    static var modeFullClock: String {
+        text(es: "reloj total", en: "full clock")
+    }
+
     static var modeAudio: String {
         text(es: "audio", en: "audio")
     }
@@ -101,6 +105,42 @@ enum L10n {
 
     static var modePhotos: String {
         text(es: "ver fotos", en: "view photos")
+    }
+
+    static var modeVideos: String {
+        text(es: "ver videos", en: "view videos")
+    }
+
+    static var videosAlbumButton: String {
+        text(es: "album fotos", en: "photos album")
+    }
+
+    static var videosFolderButton: String {
+        text(es: "carpeta", en: "folder")
+    }
+
+    static var videosSource: String {
+        text(es: "origen", en: "source")
+    }
+
+    static var videosNoAlbums: String {
+        text(es: "sin albumes con video", en: "no albums with videos")
+    }
+
+    static var videosCount: String {
+        text(es: "videos", en: "videos")
+    }
+
+    static var videosLoading: String {
+        text(es: "cargando...", en: "loading...")
+    }
+
+    static var videosShuffle: String {
+        text(es: "aleatorio", en: "shuffle")
+    }
+
+    static var videosSound: String {
+        text(es: "sonido", en: "sound")
     }
 
     static var photosAlbumButton: String {
@@ -179,6 +219,22 @@ enum L10n {
         text(es: "metronomo", en: "metronome")
     }
 
+    static var modeTapTempo: String {
+        text(es: "tap tempo", en: "tap tempo")
+    }
+
+    static var tapTempoTap: String {
+        text(es: "tap", en: "tap")
+    }
+
+    static var tapTempoTapSingular: String {
+        text(es: "tap", en: "tap")
+    }
+
+    static var tapTempoTapPlural: String {
+        text(es: "taps", en: "taps")
+    }
+
     static var modeTuner: String {
         text(es: "afinador", en: "tuner")
     }
@@ -197,6 +253,38 @@ enum L10n {
 
     static var modeInfo: String {
         text(es: "info", en: "info")
+    }
+
+    static var modeTeleprompter: String {
+        text(es: "teleprompter", en: "teleprompter")
+    }
+
+    static var teleprompterLoadFile: String {
+        text(es: "cargar archivo", en: "load file")
+    }
+
+    static var teleprompterNoFile: String {
+        text(es: "sin archivo cargado", en: "no file loaded")
+    }
+
+    static var teleprompterPlay: String {
+        text(es: "play", en: "play")
+    }
+
+    static var teleprompterPause: String {
+        text(es: "pausa", en: "pause")
+    }
+
+    static var teleprompterSpeed: String {
+        text(es: "velocidad", en: "speed")
+    }
+
+    static var teleprompterFullscreen: String {
+        text(es: "pantalla completa", en: "fullscreen")
+    }
+
+    static var teleprompterExitFullscreen: String {
+        text(es: "salir pantalla completa", en: "exit fullscreen")
     }
 
     static var modePong: String {
@@ -245,6 +333,14 @@ enum L10n {
 
     static var modeArtillery: String {
         text(es: "artilleria", en: "artillery")
+    }
+
+    static var modeBackRooms: String {
+        text(es: "back rooms", en: "back rooms")
+    }
+
+    static var modeDoom: String {
+        text(es: "doom", en: "doom")
     }
 
     static var modeTodayInHistory: String {

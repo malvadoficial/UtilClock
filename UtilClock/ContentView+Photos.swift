@@ -4,6 +4,8 @@ import AppKit
 import Photos
 
 extension ContentView {
+    var photosTransitionDuration: Double { 0.9 }
+
     var photosClockColor: Color {
         let cycleSeconds = 900.0
         let t = Date().timeIntervalSinceReferenceDate
@@ -37,11 +39,23 @@ extension ContentView {
                 Color.black
                 if let url = photosImageURLs[safe: photosCurrentIndex],
                    let image = NSImage(contentsOf: url) {
-                    Image(nsImage: image)
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: geometry.size.width, height: geometry.size.height)
-                        .clipped()
+                    ZStack {
+                        Image(nsImage: image)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: geometry.size.width, height: geometry.size.height)
+                            .clipped()
+                            .blur(radius: 18)
+                            .opacity(0.5)
+
+                        Image(nsImage: image)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: geometry.size.width, height: geometry.size.height)
+                    }
+                    .id(url.absoluteString)
+                    .transition(.opacity)
+                    .animation(.easeInOut(duration: photosTransitionDuration), value: photosCurrentIndex)
                 } else {
                     Color.black
                 }
@@ -505,13 +519,17 @@ extension ContentView {
             DispatchQueue.main.async {
                 guard photosImageURLs.isEmpty == false else { return }
                 if photosImageURLs.count == 1 {
-                    photosCurrentIndex = 0
+                    withAnimation(.easeInOut(duration: photosTransitionDuration)) {
+                        photosCurrentIndex = 0
+                    }
                 } else {
                     var next = photosCurrentIndex
                     while next == photosCurrentIndex {
                         next = Int.random(in: 0..<photosImageURLs.count)
                     }
-                    photosCurrentIndex = next
+                    withAnimation(.easeInOut(duration: photosTransitionDuration)) {
+                        photosCurrentIndex = next
+                    }
                 }
             }
         }

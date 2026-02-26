@@ -95,7 +95,8 @@ extension ContentView {
             let cardIconSize = max(30, min(46, geometry.size.width * 0.036))
             let cardTitleSize = max(18, min(28, geometry.size.width * 0.022))
             let horizontalPadding = CGFloat(24)
-            let cardWidth = max(120, min(220, (geometry.size.width - (horizontalPadding * 2) - (spacing * 3)) / 4))
+            let itemCount = CGFloat(MusicMode.allCases.count)
+            let cardWidth = max(120, min(220, (geometry.size.width - (horizontalPadding * 2) - (spacing * max(0, itemCount - 1))) / max(1, itemCount)))
             let cardHeight = max(110, min(150, geometry.size.height * 0.38))
 
             HStack(spacing: spacing) {
@@ -144,6 +145,8 @@ extension ContentView {
             return L10n.modeChordDetect
         case .metronome:
             return L10n.modeMetronome
+        case .tapTempo:
+            return L10n.modeTapTempo
         }
     }
 
@@ -157,6 +160,8 @@ extension ContentView {
             return "waveform.and.magnifyingglass"
         case .metronome:
             return "metronome"
+        case .tapTempo:
+            return "hand.tap"
         }
     }
 
@@ -175,5 +180,11 @@ extension ContentView {
         if isMusicActive(.chordFinder) {
             refreshChordFinder()
         }
+        
+        #if os(macOS)
+        if isMusicActive(.tapTempo) == false {
+            deactivateTapTempoMode()
+        }
+        #endif
     }
 }

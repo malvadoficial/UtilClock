@@ -39,6 +39,7 @@ private struct OpenMeteoForecastResponse: Decodable {
 }
 
 extension ContentView {
+
     var displayedSecondsText: String {
         switch topMode {
         case .clock:
@@ -48,6 +49,8 @@ extension ContentView {
         case .calendar:
             return viewModel.secondsText
         case .weather:
+            return viewModel.secondsText
+        case .fullClock:
             return viewModel.secondsText
         case .uptime:
             return uptimeText.seconds
@@ -396,59 +399,28 @@ extension ContentView {
 
     @ViewBuilder
     func topCalendarView(dateSize: CGFloat) -> some View {
-        let columns = Array(repeating: GridItem(.flexible(minimum: 24), spacing: 8), count: 7)
+
+        // 1) factor para agrandar SOLO la rejilla (headers + días)
+        let gridScale: CGFloat = 1.40   // prueba 1.15–1.40
+
+        // 2) columnas más “anchas”
+        let columns = Array(repeating: GridItem(.flexible(minimum: 24 * gridScale), spacing: 8 * gridScale), count: 7)
 
         VStack(spacing: 8) {
+
+            // --- TU HEADER (mes/año + flechas) IGUAL ---
             HStack(spacing: 12) {
-                Button(action: calendarPreviousMonth) {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: max(13, dateSize * 0.85), weight: .semibold))
-                        .foregroundStyle(phosphorColor)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 5)
-                        .background(Color.black.opacity(0.35))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 5, style: .continuous)
-                                .stroke(phosphorColor.opacity(0.45), lineWidth: 1)
-                        )
-                }
-                .buttonStyle(.plain)
-
-                Button(action: calendarGoToCurrentMonth) {
-                    Text("\(calendarDisplayedMonthName) \(calendarDisplayedYear)")
-                        .font(displayFont(size: max(17, dateSize * 1.25), weight: .bold))
-                        .foregroundStyle(phosphorColor)
-                        .lineLimit(1)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Color.black.opacity(0.30))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 5, style: .continuous)
-                                .stroke(phosphorColor.opacity(0.35), lineWidth: 1)
-                        )
-                }
-                .buttonStyle(.plain)
-
-                Button(action: calendarNextMonth) {
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: max(13, dateSize * 0.85), weight: .semibold))
-                        .foregroundStyle(phosphorColor)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 5)
-                        .background(Color.black.opacity(0.35))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 5, style: .continuous)
-                                .stroke(phosphorColor.opacity(0.45), lineWidth: 1)
-                        )
-                }
-                .buttonStyle(.plain)
+                // ...
             }
             .padding(.top, 2)
 
-            LazyVGrid(columns: columns, spacing: 6) {
+            // --- SOLO ESTO MÁS GRANDE ---
+            LazyVGrid(columns: columns, spacing: 6 * gridScale) {
+
                 ForEach(calendarWeekdayHeaders, id: \.self) { dayName in
                     Text(dayName)
-                        .font(.system(size: max(11, dateSize * 0.80), weight: .semibold, design: .monospaced))
+                        .font(.system(size: max(11, dateSize * (0.80 * gridScale)),
+                                      weight: .semibold, design: .monospaced))
                         .foregroundStyle(phosphorDim)
                         .frame(maxWidth: .infinity)
                 }
@@ -456,12 +428,15 @@ extension ContentView {
                 ForEach(Array(calendarGridDays.enumerated()), id: \.offset) { _, value in
                     if let dayValue = value {
                         let isToday = isCalendarToday(day: dayValue)
+
                         Text("\(dayValue)")
-                            .font(.system(size: max(11, dateSize * 0.82), weight: .medium, design: .monospaced))
+                            .font(.system(size: max(11, dateSize * (0.82 * gridScale)),
+                                          weight: .medium, design: .monospaced))
                             .foregroundStyle(isToday ? Color.black : phosphorDim)
                             .lineLimit(1)
                             .minimumScaleFactor(0.8)
-                            .frame(width: 30, height: 24)
+                            // 3) celdas más grandes
+                            .frame(width: 30 * gridScale, height: 24 * gridScale)
                             .background(
                                 ZStack {
                                     if isToday {
@@ -474,11 +449,12 @@ extension ContentView {
                             )
                     } else {
                         Text(" ")
-                            .frame(width: 30, height: 24)
+                            .frame(width: 30 * gridScale, height: 24 * gridScale)
                     }
                 }
             }
-            .frame(maxWidth: 320)
+            // 4) permitir que el grid sea más ancho
+            .frame(maxWidth: 320 * gridScale)
         }
         .padding(.top, 40)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -1116,6 +1092,7 @@ extension ContentView {
     func startGlobalAlarm(duration: TimeInterval) {
         stopMetronome()
         tunerEngine.stop()
+        deactivateTapTempoMode()
         deactivatePongMode()
         deactivateArkanoidMode()
         deactivateMissileCommandMode()
@@ -1311,5 +1288,182 @@ extension ContentView {
             }
         }
     }
+    
+    // MARK: - Full Clock View
+    
+    @ViewBuilder
+    func fullClockView(dateSize: CGFloat, mainClockSize: CGFloat, secondsSize: CGFloat, driveTitleSize: CGFloat) -> some View {
+        HStack(alignment: .center, spacing: 30) {
+            // Columna izquierda: Reloj y fecha
+            VStack(alignment: .leading, spacing: 10) {
+                // Hora actual
+                HStack(alignment: .lastTextBaseline, spacing: 2) {
+                    let hourMinute = viewModel.hourMinuteText
+                    let components = hourMinute.components(separatedBy: ":")
+                    let hourPart = components.first ?? "00"
+                    let minutePart = components.count > 1 ? components[1] : "00"
+                    
+                    Text(hourPart)
+                        .font(displayFont(size: max(44, mainClockSize * 0.63), weight: .bold))
+                        .monospacedDigit()
+                        .shadow(color: phosphorColor.opacity(0.8), radius: 6)
+                    
+                    Text(":")
+                        .font(displayFont(size: max(44, mainClockSize * 0.63), weight: .bold))
+                        .monospacedDigit()
+                        .shadow(color: phosphorColor.opacity(0.8), radius: 6)
+                        .opacity(timeSeparatorOpacity)
+                    
+                    Text(minutePart)
+                        .font(displayFont(size: max(44, mainClockSize * 0.63), weight: .bold))
+                        .monospacedDigit()
+                        .shadow(color: phosphorColor.opacity(0.8), radius: 6)
+                    
+                    Text(viewModel.secondsText)
+                        .font(displayFont(size: max(24, secondsSize * 0.65), weight: .bold))
+                        .monospacedDigit()
+                        .shadow(color: phosphorColor.opacity(0.7), radius: 4)
+                }
+                .foregroundStyle(phosphorColor)
+                
+                // Día completo
+                Text(fullClockFullDateText)
+                    .font(.system(size: max(14, dateSize * 1.0), weight: .medium, design: .monospaced))
+                    .foregroundStyle(phosphorDim)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            
+            // Columna derecha: Calendario y clima
+            VStack(alignment: .trailing, spacing: 10) {
+                // Mini calendario
+                fullClockMiniCalendar(dateSize: dateSize)
+                
+                // Info del clima
+                if weatherCurrentTemperatureC != nil || weatherLocationName.isEmpty == false {
+                    fullClockWeatherInfo(dateSize: dateSize, driveTitleSize: driveTitleSize)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .trailing)
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 6)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+    }
+    
+    var fullClockFullDateText: String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "es_ES") // o "es"
+        formatter.setLocalizedDateFormatFromTemplate("EEEE d MMMM yyyy")
+        return formatter.string(from: viewModel.now)
+    }
+    
+    @ViewBuilder
+    func fullClockMiniCalendar(dateSize: CGFloat) -> some View {
+        let gridDays = calendarGridDays
+        
+        VStack(spacing: 5) {
+            // Nombre del mes y año (más pequeño)
+            Text("\(calendarDisplayedMonthName) \(calendarDisplayedYear)")
+                .font(.system(size: max(13, dateSize * 0.92), weight: .bold, design: .monospaced))
+                .foregroundStyle(phosphorColor)
+            
+            // Headers de días
+            HStack(spacing: 2) {
+                ForEach(calendarWeekdayHeaders, id: \.self) { dayName in
+                    Text(dayName)
+                        .font(.system(size: max(9, dateSize * 0.65), weight: .semibold, design: .monospaced))
+                        .foregroundStyle(phosphorDim)
+                        .frame(minWidth: 18, maxWidth: .infinity)
+                }
+            }
+            
+            // Grid de días usando ForEach en filas
+            let rows = stride(from: 0, to: gridDays.count, by: 7).map { startIndex in
+                Array(gridDays[startIndex..<min(startIndex + 7, gridDays.count)])
+            }
+            
+            ForEach(0..<rows.count, id: \.self) { rowIndex in
+                HStack(spacing: 2) {
+                    ForEach(0..<7, id: \.self) { colIndex in
+                        let index = rowIndex * 7 + colIndex
+                        if index < gridDays.count, let dayValue = gridDays[index] {
+                            let isToday = isCalendarToday(day: dayValue)
+                            
+                            Text("\(dayValue)")
+                                .font(.system(size: max(10, dateSize * 0.72), weight: isToday ? .bold : .medium, design: .monospaced))
+                                .foregroundStyle(isToday ? Color.black : phosphorColor)
+                                .lineLimit(1)
+                                .frame(minWidth: 18, maxWidth: .infinity, minHeight: 16)
+                                .background(
+                                    ZStack {
+                                        if isToday {
+                                            RoundedRectangle(cornerRadius: 3, style: .continuous)
+                                                .fill(phosphorColor.opacity(0.95))
+                                            RoundedRectangle(cornerRadius: 3, style: .continuous)
+                                                .stroke(Color.white.opacity(0.9), lineWidth: 1.2)
+                                        } else {
+                                            RoundedRectangle(cornerRadius: 3, style: .continuous)
+                                                .stroke(phosphorDim.opacity(0.15), lineWidth: 0.5)
+                                        }
+                                    }
+                                )
+                        } else {
+                            Text("")
+                                .frame(minWidth: 18, maxWidth: .infinity, minHeight: 16)
+                        }
+                    }
+                }
+            }
+        }
+        .padding(8)
+        .background(Color.black.opacity(0.3))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(phosphorColor.opacity(0.3), lineWidth: 1.2)
+        )
+    }
+    
+    @ViewBuilder
+    func fullClockWeatherInfo(dateSize: CGFloat, driveTitleSize: CGFloat) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            // Ubicación (más grande)
+            Text(weatherLocationName)
+                .font(.system(size: max(14, dateSize * 1.0), weight: .medium, design: .monospaced))
+                .foregroundStyle(phosphorColor)
+                .lineLimit(1)
+            
+            // Fila: Icono y Temperatura juntos
+            HStack(spacing: 10) {
+                // Icono del clima
+                Image(systemName: weatherSymbolName(code: weatherCurrentWeatherCode, windKmh: weatherCurrentWindKmh))
+                    .font(.system(size: max(34, driveTitleSize * 1.15), weight: .semibold))
+                    .foregroundStyle(phosphorColor)
+                    .frame(width: 40)
+                
+                // Temperatura grande
+                Text(weatherCurrentTemperatureC.map { "\(Int($0.rounded()))°C" } ?? "--°C")
+                    .font(displayFont(size: max(28, driveTitleSize * 0.95), weight: .bold))
+                    .foregroundStyle(phosphorColor)
+            }
+            
+            // MIN/MAX horizontal (más grandes)
+            HStack(spacing: 8) {
+                Text("MIN \(weatherTodayMinC.map { "\(Int($0.rounded()))°" } ?? "--")")
+                    .font(.system(size: max(11, dateSize * 0.78), weight: .regular, design: .monospaced))
+                Text("MAX \(weatherTodayMaxC.map { "\(Int($0.rounded()))°" } ?? "--")")
+                    .font(.system(size: max(11, dateSize * 0.78), weight: .regular, design: .monospaced))
+            }
+            .foregroundStyle(phosphorDim)
+        }
+        .padding(9)
+        .background(Color.black.opacity(0.3))
+        .overlay(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .stroke(phosphorColor.opacity(0.3), lineWidth: 1)
+        )
+    }
     #endif
 }
+
