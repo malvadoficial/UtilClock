@@ -21,6 +21,8 @@ Esta aplicación se ha desarrollado utilizando **Codex de OpenAI** y está pensa
   - Red (IP pública/privada y tráfico por interfaz)
   - CPU + memoria
   - Apps + procesos
+  - Ver fotos (fuente por álbum o carpeta)
+  - Ver vídeos (fuente por carpeta local)
   - Música (launcher: metrónomo, afinador, detector y buscador de acordes)
   - Info (launcher: RAE, frase musical y tal día)
   - Juegos (launcher multi-fila con scroll):
@@ -37,13 +39,14 @@ Esta aplicación se ha desarrollado utilizando **Codex de OpenAI** y está pensa
   - Elegir presentación de la app: `Dock` o `Barra de menús`
   - Auto-inicio al iniciar sesión (`ON/OFF`)
 
-## Novedades recientes (v1.2.5)
+## Novedades recientes (v1.2.6)
 
-- Internacionalización del modo `Ver Fotos`:
-  - Eliminados textos visibles hardcodeados en ese modo.
-  - Nuevas claves `L10n` para botones, etiquetas, estados y mensajes de permiso.
-  - Prompt del selector de carpeta internacionalizado.
-- Ajuste de consistencia de idioma en la UI del launcher de fotos.
+- Nuevo modo `Ver Vídeos`:
+  - Selección de carpeta con persistencia segura.
+  - Lista/cola de reproducción desde archivos locales.
+  - Controles integrados de reproducción y barra de progreso.
+- Corrección de build:
+  - Eliminada referencia duplicada a `doom1.wad` que provocaba fallos de compilación.
 
 ## Capturas
 

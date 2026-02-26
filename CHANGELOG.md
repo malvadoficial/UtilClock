@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.2.6 - 2026-02-28
+
+- Added `Ver Videos` mode:
+  - Folder picker with persisted security-scoped bookmark.
+  - Playlist generation from local video files.
+  - Playback controls (`play/pause`, previous/next, seek bar) and title overlay.
+- Build/release stability:
+  - Fixed duplicate `doom1.wad` reference causing release build errors.
+
 ## v1.2.5 - 2026-02-23
 
 - Internationalization pass for `Ver Fotos` UI:
