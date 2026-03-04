@@ -38,14 +38,12 @@ Esta aplicación se ha desarrollado utilizando **Codex de OpenAI** y está pensa
   - Recordar pantalla de inicio y opción para olvidar selección guardada
   - Elegir presentación de la app: `Dock` o `Barra de menús`
 
-## Novedades recientes (v1.2.6)
+## Novedades recientes (v1.2.7)
 
-- Nuevo modo `Ver Vídeos`:
-  - Selección de carpeta con persistencia segura.
-  - Lista/cola de reproducción desde archivos locales.
-  - Controles integrados de reproducción y barra de progreso.
-- Corrección de build:
-  - Eliminada referencia duplicada a `doom1.wad` que provocaba fallos de compilación.
+- Eliminada por completo la funcionalidad de `Auto-inicio`:
+  - Retirado de ajustes y menú de barra.
+  - Limpieza automática de registro legado al arrancar la app.
+- Conservadas y operativas el resto de funciones de presentación (`Dock` / `Barra de menús`) y utilidades.
 
 ## Capturas
 
