@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.2.7 - 2026-03-04
+
+- Removed launch-at-login functionality completely:
+  - Removed launch-at-login controls from app settings and menu bar.
+  - Removed launch-at-login localization strings and references in docs.
+  - Added startup cleanup to unregister legacy launch-at-login state if previously enabled.
+
 ## v1.2.6 - 2026-02-28
 
 - Added `Ver Videos` mode:
