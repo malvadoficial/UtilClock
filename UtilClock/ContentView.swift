@@ -12,7 +12,6 @@ import CoreAudio
 import Darwin
 import AVFoundation
 import QuartzCore
-import ServiceManagement
 import UniformTypeIdentifiers
 import Photos
 #endif
@@ -512,8 +511,6 @@ struct ContentView: View {
     @State var splitFullscreenTarget: SplitFullscreenTarget = .none
     @State var preferredFullscreen = true
     @State var menuBarOnlyMode = false
-    @State var launchAtLoginEnabled = false
-    @State var launchAtLoginErrorText: String?
     @State var lastTriggeredAlarmSecondKey: String?
     @State var selectedAudioDeviceName = L10n.noAudioDevice
     @State var cpuUsagePercent: Double = 0
@@ -1715,7 +1712,6 @@ struct ContentView: View {
         .background(WindowReader(window: $hostWindow))
         .onAppear {
             loadModeVisibilitySettings()
-            refreshLaunchAtLoginStatus()
             knownVolumeIDs = Set(usbMonitor.volumes.map(\.id))
             syncAlarmToCurrentTimeIfUnset()
             refreshAudioDeviceName()

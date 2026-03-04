@@ -26,6 +26,9 @@ struct UtilClockApp: App {
 
     init() {
         FontRegistrar.registerBundledFonts()
+        #if os(macOS)
+        disableLegacyLaunchAtLogin()
+        #endif
     }
 
     var body: some Scene {
@@ -116,10 +119,8 @@ private extension UtilClockApp {
 
         statusBarController.update(
             isVisible: menuBarOnlyMode,
-            launchAtLoginEnabled: isLaunchAtLoginEnabled(),
             toggleFullscreen: { toggleFullscreen() },
-            moveToScreen: { screenID in moveMainWindowToScreen(screenID) },
-            toggleLaunchAtLogin: { enabled in setLaunchAtLoginEnabled(enabled) }
+            moveToScreen: { screenID in moveMainWindowToScreen(screenID) }
         )
     }
 
@@ -158,21 +159,14 @@ private extension UtilClockApp {
         (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value
     }
 
-    func isLaunchAtLoginEnabled() -> Bool {
-        SMAppService.mainApp.status == .enabled
-    }
-
-    func setLaunchAtLoginEnabled(_ enabled: Bool) {
+    func disableLegacyLaunchAtLogin() {
         do {
-            if enabled {
-                try SMAppService.mainApp.register()
-            } else {
+            if SMAppService.mainApp.status == .enabled {
                 try SMAppService.mainApp.unregister()
             }
         } catch {
-            // Keep menu responsive even if system registration fails.
+            // Ignore errors; the app must continue even if cleanup fails.
         }
-        applyPresentationMode()
     }
 }
 
@@ -180,18 +174,14 @@ private final class StatusBarController {
     private var statusItem: NSStatusItem?
     private var toggleFullscreenAction: (() -> Void)?
     private var moveToScreenAction: ((UInt32) -> Void)?
-    private var toggleLaunchAtLoginAction: ((Bool) -> Void)?
 
     func update(
         isVisible: Bool,
-        launchAtLoginEnabled: Bool,
         toggleFullscreen: @escaping () -> Void,
-        moveToScreen: @escaping (UInt32) -> Void,
-        toggleLaunchAtLogin: @escaping (Bool) -> Void
+        moveToScreen: @escaping (UInt32) -> Void
     ) {
         toggleFullscreenAction = toggleFullscreen
         moveToScreenAction = moveToScreen
-        toggleLaunchAtLoginAction = toggleLaunchAtLogin
 
         if isVisible {
             if statusItem == nil {
@@ -199,14 +189,14 @@ private final class StatusBarController {
                 statusItem?.button?.image = makeStatusBarImage()
                 statusItem?.button?.imagePosition = .imageOnly
             }
-            statusItem?.menu = buildMenu(launchAtLoginEnabled: launchAtLoginEnabled)
+            statusItem?.menu = buildMenu()
         } else if let item = statusItem {
             NSStatusBar.system.removeStatusItem(item)
             statusItem = nil
         }
     }
 
-    private func buildMenu(launchAtLoginEnabled: Bool) -> NSMenu {
+    private func buildMenu() -> NSMenu {
         let menu = NSMenu()
 
         let monitorItem = NSMenuItem(title: L10n.menuChangeMonitor, action: nil, keyEquivalent: "")
@@ -216,14 +206,6 @@ private final class StatusBarController {
         let fullscreenItem = NSMenuItem(title: fullscreenMenuTitle(), action: #selector(toggleFullScreen), keyEquivalent: "")
         fullscreenItem.target = self
         menu.addItem(fullscreenItem)
-
-        let launchAtLoginTitle = launchAtLoginEnabled
-            ? L10n.menuLaunchAtLoginOff
-            : L10n.menuLaunchAtLoginOn
-        let launchAtLoginItem = NSMenuItem(title: launchAtLoginTitle, action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
-        launchAtLoginItem.target = self
-        launchAtLoginItem.state = launchAtLoginEnabled ? .on : .off
-        menu.addItem(launchAtLoginItem)
 
         menu.addItem(.separator())
 
@@ -293,12 +275,6 @@ private final class StatusBarController {
     private func selectScreen(_ sender: NSMenuItem) {
         guard let idValue = sender.representedObject as? NSNumber else { return }
         moveToScreenAction?(idValue.uint32Value)
-    }
-
-    @objc
-    private func toggleLaunchAtLogin() {
-        let currentlyEnabled = (SMAppService.mainApp.status == .enabled)
-        toggleLaunchAtLoginAction?(currentlyEnabled == false)
     }
 
     @objc

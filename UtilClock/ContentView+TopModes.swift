@@ -2,7 +2,6 @@ import SwiftUI
 #if os(macOS)
 import AppKit
 import AVFoundation
-import ServiceManagement
 #endif
 
 struct WeatherDayForecast: Identifiable {
@@ -1067,24 +1066,6 @@ extension ContentView {
         saveModeVisibilitySettings()
     }
 
-    func refreshLaunchAtLoginStatus() {
-        launchAtLoginEnabled = (SMAppService.mainApp.status == .enabled)
-    }
-
-    func setLaunchAtLoginEnabled(_ enabled: Bool) {
-        do {
-            if enabled {
-                try SMAppService.mainApp.register()
-            } else {
-                try SMAppService.mainApp.unregister()
-            }
-            launchAtLoginErrorText = nil
-        } catch {
-            launchAtLoginErrorText = "error auto-inicio: \(error.localizedDescription)"
-        }
-        refreshLaunchAtLoginStatus()
-    }
-
     func startCountdownAlarm() {
         startGlobalAlarm(duration: 30)
     }
@@ -1466,4 +1447,3 @@ extension ContentView {
     }
     #endif
 }
-

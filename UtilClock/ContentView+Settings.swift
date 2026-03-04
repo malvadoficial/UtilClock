@@ -128,89 +128,6 @@ extension ContentView {
                         Divider()
                             .background(phosphorDim.opacity(0.4))
                             .padding(.vertical, 6)
-/*
-                        Text("Presentacion app / App presentation")
-                            .font(.system(size: 20, weight: .semibold, design: .monospaced))
-                            .foregroundStyle(phosphorDim)
-
-                        HStack(spacing: 10) {
-                            Button(action: { setMenuBarOnlyMode(false) }) {
-                                Text("Dock")
-                                    .font(.system(size: 14, weight: .semibold, design: .monospaced))
-                                    .foregroundStyle(phosphorColor)
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 8)
-                                    .background(Color.black.opacity(menuBarOnlyMode ? 0.35 : 0.65))
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                            .stroke(phosphorColor.opacity(menuBarOnlyMode ? 0.4 : 0.9), lineWidth: 1)
-                                    )
-                            }
-                            .buttonStyle(.plain)
-
-                            Button(action: { setMenuBarOnlyMode(true) }) {
-                                Text("Barra de menús")
-                                    .font(.system(size: 14, weight: .semibold, design: .monospaced))
-                                    .foregroundStyle(phosphorColor)
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 8)
-                                    .background(Color.black.opacity(menuBarOnlyMode ? 0.65 : 0.35))
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                            .stroke(phosphorColor.opacity(menuBarOnlyMode ? 0.9 : 0.4), lineWidth: 1)
-                                    )
-                            }
-                            .buttonStyle(.plain)
-                        }
-
-                        Divider()
-                            .background(phosphorDim.opacity(0.4))
-                            .padding(.vertical, 6)
-
-                        Text("Inicio de sesion / Login")
-                            .font(.system(size: 20, weight: .semibold, design: .monospaced))
-                            .foregroundStyle(phosphorDim)
-
-                        HStack(spacing: 10) {
-                            Button(action: { setLaunchAtLoginEnabled(true) }) {
-                                Text("Auto-inicio ON")
-                                    .font(.system(size: 14, weight: .semibold, design: .monospaced))
-                                    .foregroundStyle(phosphorColor)
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 8)
-                                    .background(Color.black.opacity(launchAtLoginEnabled ? 0.65 : 0.35))
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                            .stroke(phosphorColor.opacity(launchAtLoginEnabled ? 0.9 : 0.4), lineWidth: 1)
-                                    )
-                            }
-                            .buttonStyle(.plain)
-
-                            Button(action: { setLaunchAtLoginEnabled(false) }) {
-                                Text("Auto-inicio OFF")
-                                    .font(.system(size: 14, weight: .semibold, design: .monospaced))
-                                    .foregroundStyle(phosphorColor)
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 8)
-                                    .background(Color.black.opacity(launchAtLoginEnabled ? 0.35 : 0.65))
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                            .stroke(phosphorColor.opacity(launchAtLoginEnabled ? 0.4 : 0.9), lineWidth: 1)
-                                    )
-                            }
-                            .buttonStyle(.plain)
-                        }
-
-                        if let launchAtLoginErrorText, launchAtLoginErrorText.isEmpty == false {
-                            Text(launchAtLoginErrorText)
-                                .font(.system(size: 12, weight: .regular, design: .monospaced))
-                                .foregroundStyle(Color(red: 1.0, green: 0.72, blue: 0.66))
-                        }
-
-                        Divider()
-                            .background(phosphorDim.opacity(0.4))
-                            .padding(.vertical, 6)
-*/
                         Text("Pantalla superior / Top screen")
                             .font(.system(size: 20, weight: .semibold, design: .monospaced))
                             .foregroundStyle(phosphorDim)
@@ -956,4 +873,3 @@ extension ContentView {
     }
     #endif
 }
-

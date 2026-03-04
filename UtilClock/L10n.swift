@@ -463,14 +463,6 @@ enum L10n {
         text(es: "desactivar pantalla completa", en: "disable fullscreen")
     }
 
-    static var menuLaunchAtLoginOn: String {
-        text(es: "auto-inicio on", en: "launch at login on")
-    }
-
-    static var menuLaunchAtLoginOff: String {
-        text(es: "auto-inicio off", en: "launch at login off")
-    }
-
     static var menuQuit: String {
         text(es: "Salir", en: "Quit")
     }

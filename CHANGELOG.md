@@ -101,9 +101,7 @@
 - Added menu-bar control menu with:
   - monitor switcher (list of available displays),
   - fullscreen enable/disable,
-  - launch-at-login toggle,
   - quit action with exit icon.
-- Added launch-at-login controls in app Settings (`Auto-inicio ON/OFF`).
 - Improved menu-bar behavior to avoid fullscreen breakage when toggling presentation modes.
 - Standardized menu-bar labels to single-language localization (system language, fallback to English).
 

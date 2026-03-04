@@ -37,7 +37,6 @@ Esta aplicación se ha desarrollado utilizando **Codex de OpenAI** y está pensa
   - Panel de récords/highscores por juego con opción para reset global a `0`
   - Recordar pantalla de inicio y opción para olvidar selección guardada
   - Elegir presentación de la app: `Dock` o `Barra de menús`
-  - Auto-inicio al iniciar sesión (`ON/OFF`)
 
 ## Novedades recientes (v1.2.6)
 
