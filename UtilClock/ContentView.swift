@@ -555,6 +555,7 @@ struct ContentView: View {
     @State var photosPermissionStatus = "unknown"
     @State var photosLoading = false
     @State var photosStartWhenReady = false
+    @State var photosSourcesHydrated = false
     #if os(macOS)
     @State var draggedTopMode: TopClockMode?
     @State var draggedUtilityMode: UtilityMode?
@@ -829,6 +830,9 @@ struct ContentView: View {
     @State var videosProgress: Double = 0
     @State var videosTimeObserver: Any?
     @State var videosIsSeeking = false
+    @State var videosSourcesHydrated = false
+    @State var videosFolderLoadRequestID = UUID()
+    @State var videosAlbumsLoadRequestID = UUID()
     #endif
 
     var body: some View {
@@ -1717,16 +1721,24 @@ struct ContentView: View {
             refreshAudioDeviceName()
             refreshCPUUsage()
             refreshSystemAudioState(triggerOnMuteTransition: false)
-            refreshNetworkModeData(forcePublicIPRefresh: true)
             startHousekeepingTimer()
             refreshAvailableDisplays()
             applySavedStartupDisplaySelectionIfNeeded()
             syncMusicActivation()
             syncGameActivation()
             syncInfoActivation()
-            refreshWeatherDataIfNeeded(force: true)
-            loadPhotoModeSettings()
-            loadVideoModeSettings()
+            if topMode == .weather || topMode == .fullClock {
+                refreshWeatherDataIfNeeded(force: true)
+            }
+            loadPhotoModeSettings(loadSources: false)
+            loadVideoModeSettings(loadSources: false)
+            if utilityMode == .network {
+                refreshNetworkModeData(forcePublicIPRefresh: true)
+            } else if utilityMode == .photos {
+                hydratePhotosSourcesIfNeeded()
+            } else if utilityMode == .videos {
+                hydrateVideosSourcesIfNeeded()
+            }
         }
         .onChange(of: usbMonitor.volumes.map(\.id)) { _, ids in
             let newIDs = Set(ids)
@@ -1766,9 +1778,16 @@ struct ContentView: View {
             syncInfoActivation()
             if newMode != .photos {
                 stopPhotosSlideshow()
+            } else {
+                hydratePhotosSourcesIfNeeded()
             }
             if newMode != .videos {
                 stopVideosPlayback()
+            } else {
+                hydrateVideosSourcesIfNeeded()
+            }
+            if newMode == .network {
+                refreshNetworkModeData(forcePublicIPRefresh: true)
             }
         }
         .simultaneousGesture(
