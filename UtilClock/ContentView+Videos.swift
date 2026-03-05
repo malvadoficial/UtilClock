@@ -399,32 +399,40 @@ extension ContentView {
 
     func loadVideosAlbums() {
         guard videosPermissionStatus == "authorized" || videosPermissionStatus == "limited" else { return }
+        let requestID = UUID()
+        videosAlbumsLoadRequestID = requestID
 
-        var byID: [String: PhotosAlbum] = [:]
-        let videoFetchOpts = PHFetchOptions()
-        videoFetchOpts.predicate = NSPredicate(format: "mediaType == %d", PHAssetMediaType.video.rawValue)
+        DispatchQueue.global(qos: .userInitiated).async {
+            var byID: [String: PhotosAlbum] = [:]
+            let videoFetchOpts = PHFetchOptions()
+            videoFetchOpts.predicate = NSPredicate(format: "mediaType == %d", PHAssetMediaType.video.rawValue)
 
-        let sources: [(PHAssetCollectionType, PHAssetCollectionSubtype)] = [
-            (.album, .any),
-            (.smartAlbum, .any)
-        ]
-        for source in sources {
-            let fetch = PHAssetCollection.fetchAssetCollections(with: source.0, subtype: source.1, options: nil)
-            fetch.enumerateObjects { collection, _, _ in
-                let count = PHAsset.fetchAssets(in: collection, options: videoFetchOpts).count
-                guard count > 0 else { return }
-                let title = collection.localizedTitle?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "Album"
-                byID[collection.localIdentifier] = PhotosAlbum(
-                    id: collection.localIdentifier,
-                    title: title,
-                    count: count
-                )
+            let sources: [(PHAssetCollectionType, PHAssetCollectionSubtype)] = [
+                (.album, .any),
+                (.smartAlbum, .any)
+            ]
+            for source in sources {
+                let fetch = PHAssetCollection.fetchAssetCollections(with: source.0, subtype: source.1, options: nil)
+                fetch.enumerateObjects { collection, _, _ in
+                    let count = PHAsset.fetchAssets(in: collection, options: videoFetchOpts).count
+                    guard count > 0 else { return }
+                    let title = collection.localizedTitle?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "Album"
+                    byID[collection.localIdentifier] = PhotosAlbum(
+                        id: collection.localIdentifier,
+                        title: title,
+                        count: count
+                    )
+                }
+            }
+
+            var result = Array(byID.values)
+            result.sort { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
+
+            DispatchQueue.main.async {
+                guard videosAlbumsLoadRequestID == requestID else { return }
+                videosAlbums = result
             }
         }
-
-        var result = Array(byID.values)
-        result.sort { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
-        videosAlbums = result
     }
 
     func selectVideosAlbum(_ album: PhotosAlbum) {
@@ -462,35 +470,51 @@ extension ContentView {
     func loadVideosFromFolder() {
         guard videosSourceType == "folder" else { return }
         guard let folderURL = resolveVideosFolderURL() else {
+            videosLoading = false
             videosVideoURLs = []
             videosCurrentIndex = 0
+            videosStartWhenReady = false
             return
         }
+        videosLoading = true
+        let requestID = UUID()
+        videosFolderLoadRequestID = requestID
 
-        let didAccess = folderURL.startAccessingSecurityScopedResource()
-        defer {
-            if didAccess { folderURL.stopAccessingSecurityScopedResource() }
-        }
+        DispatchQueue.global(qos: .userInitiated).async {
+            let didAccess = folderURL.startAccessingSecurityScopedResource()
+            defer {
+                if didAccess { folderURL.stopAccessingSecurityScopedResource() }
+            }
 
-        let fm = FileManager.default
-        let validExtensions: Set<String> = ["mp4", "m4v", "mov"]
-        var collected: [URL] = []
+            let fm = FileManager.default
+            let validExtensions: Set<String> = ["mp4", "m4v", "mov"]
+            var collected: [URL] = []
 
-        let enumerator = fm.enumerator(
-            at: folderURL,
-            includingPropertiesForKeys: [.isRegularFileKey, .isDirectoryKey],
-            options: [.skipsHiddenFiles]
-        )
-        while let fileURL = enumerator?.nextObject() as? URL {
-            let ext = fileURL.pathExtension.lowercased()
-            if validExtensions.contains(ext) {
-                collected.append(fileURL)
+            let enumerator = fm.enumerator(
+                at: folderURL,
+                includingPropertiesForKeys: [.isRegularFileKey, .isDirectoryKey],
+                options: [.skipsHiddenFiles]
+            )
+            while let fileURL = enumerator?.nextObject() as? URL {
+                let ext = fileURL.pathExtension.lowercased()
+                if validExtensions.contains(ext) {
+                    collected.append(fileURL)
+                }
+            }
+
+            let sorted = collected
+                .sorted { $0.lastPathComponent.localizedCaseInsensitiveCompare($1.lastPathComponent) == .orderedAscending }
+
+            DispatchQueue.main.async {
+                guard videosFolderLoadRequestID == requestID else { return }
+                videosLoading = false
+                videosVideoURLs = sorted
+                videosCurrentIndex = 0
+                if videosStartWhenReady {
+                    beginVideosPlayback()
+                }
             }
         }
-
-        videosVideoURLs = collected
-            .sorted { $0.lastPathComponent.localizedCaseInsensitiveCompare($1.lastPathComponent) == .orderedAscending }
-        videosCurrentIndex = 0
     }
 
     func resolveVideosFolderURL() -> URL? {
@@ -567,7 +591,9 @@ extension ContentView {
             }
         } else {
             if videosVideoURLs.isEmpty {
+                videosStartWhenReady = true
                 loadVideosFromFolder()
+                return
             }
         }
         beginVideosPlayback()
@@ -766,7 +792,13 @@ extension ContentView {
         }
     }
 
-    func loadVideoModeSettings() {
+    func hydrateVideosSourcesIfNeeded() {
+        guard videosSourcesHydrated == false else { return }
+        videosSourcesHydrated = true
+        refreshVideosModeIfNeeded()
+    }
+
+    func loadVideoModeSettings(loadSources: Bool = true) {
         let defaults = UserDefaults.standard
         videosSelectedFolderPath = defaults.string(forKey: "utilclock.videos.folderPath") ?? ""
         videosSoundEnabled = defaults.object(forKey: "utilclock.videos.sound") as? Bool ?? true
@@ -777,11 +809,9 @@ extension ContentView {
         videosSelectedAlbumName = defaults.string(forKey: "utilclock.videos.albumName") ?? ""
 
         refreshVideosPermissionStatus()
-        if videosSourceType == "album" {
-            loadVideosAlbums()
-            loadVideosFromAlbum()
-        } else {
-            loadVideosFromFolder()
+        videosSourcesHydrated = false
+        if loadSources {
+            hydrateVideosSourcesIfNeeded()
         }
     }
 }

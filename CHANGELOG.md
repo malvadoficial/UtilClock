@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.2.8 - 2026-03-05
+
+- Startup performance improvements:
+  - Deferred expensive mode initialization on app launch (photos/videos/network only load on demand).
+  - Reduced cold-start blocking work after macOS reboot.
+- Fixed freeze when entering `Ver Videos`:
+  - Moved folder video scan off the main thread.
+  - Moved photo-album video listing off the main thread.
+  - Added async load request guards to prevent stale UI updates/races while switching modes.
+
 ## v1.2.7 - 2026-03-04
 
 - Removed launch-at-login functionality completely:

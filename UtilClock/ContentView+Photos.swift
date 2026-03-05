@@ -288,6 +288,12 @@ extension ContentView {
         }
     }
 
+    func hydratePhotosSourcesIfNeeded() {
+        guard photosSourcesHydrated == false else { return }
+        photosSourcesHydrated = true
+        refreshPhotosModeIfNeeded()
+    }
+
     func refreshPhotoLibraryAuthorizationState() {
         let status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
         photosPermissionStatus = mapPhotosAuthStatus(status)
@@ -555,7 +561,7 @@ extension ContentView {
         defaults.set(photosSelectedAlbumName, forKey: "utilclock.photos.albumName")
     }
 
-    func loadPhotoModeSettings() {
+    func loadPhotoModeSettings(loadSources: Bool = true) {
         let defaults = UserDefaults.standard
         photosSelectedFolderPath = defaults.string(forKey: "utilclock.photos.folderPath") ?? ""
         photosSlideDurationSeconds = max(1, defaults.double(forKey: "utilclock.photos.slideDuration"))
@@ -569,11 +575,9 @@ extension ContentView {
         photosSelectedAlbumName = defaults.string(forKey: "utilclock.photos.albumName") ?? ""
 
         refreshPhotoLibraryAuthorizationState()
-        if photosSourceType == "album" {
-            loadPhotosAlbums()
-            loadImagesFromSelectedPhotosAlbum()
-        } else {
-            loadImagesFromSelectedPhotosFolder()
+        photosSourcesHydrated = false
+        if loadSources {
+            hydratePhotosSourcesIfNeeded()
         }
     }
 
