@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.2.9 - 2026-03-05
+
+- Fullscreen/window mode fixes:
+  - Fixed settings buttons (`Pantalla completa` / `Ventana`) when window reference was not ready.
+  - Improved fullscreen transitions by avoiding repeated toggles during animation.
+  - Added fallback to active app window and ensured app activation policy allows fullscreen transitions reliably.
+
 ## v1.2.8 - 2026-03-05
 
 - Startup performance improvements:

@@ -3048,14 +3048,34 @@ struct WindowReader: NSViewRepresentable {
     @Binding var window: NSWindow?
 
     func makeNSView(context: Context) -> NSView {
-        let view = NSView()
-        DispatchQueue.main.async {
-            self.window = view.window
+        let view = WindowReaderNSView()
+        view.onWindowChange = { newWindow in
+            if self.window !== newWindow {
+                self.window = newWindow
+            }
         }
         return view
     }
     
     func updateNSView(_ nsView: NSView, context: Context) {
+        guard let readerView = nsView as? WindowReaderNSView else { return }
+        readerView.onWindowChange = { newWindow in
+            if self.window !== newWindow {
+                self.window = newWindow
+            }
+        }
+        DispatchQueue.main.async {
+            readerView.onWindowChange?(readerView.window)
+        }
+    }
+}
+
+final class WindowReaderNSView: NSView {
+    var onWindowChange: ((NSWindow?) -> Void)?
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        onWindowChange?(window)
     }
 }
 #endif

@@ -38,6 +38,10 @@ private struct OpenMeteoForecastResponse: Decodable {
 }
 
 extension ContentView {
+    func presentationWindow() -> NSWindow? {
+        hostWindow ?? NSApp.keyWindow ?? NSApp.mainWindow ?? NSApp.windows.first
+    }
+
 
     var displayedSecondsText: String {
         switch topMode {
@@ -991,7 +995,7 @@ extension ContentView {
 
         showStartupScreenPicker = false
 
-        guard hostWindow != nil else {
+        guard presentationWindow() != nil else {
             guard remainingRetries > 0 else {
                 showStartupScreenPicker = true
                 return
@@ -1015,7 +1019,7 @@ extension ContentView {
     }
 
     func moveToDisplayAndApplyPresentation(_ targetScreenID: UInt32) {
-        guard let window = hostWindow else { return }
+        guard let window = presentationWindow() else { return }
         guard let targetScreen = NSScreen.screens.first(where: { screenID(for: $0) == targetScreenID }) else { return }
 
         window.setFrame(targetScreen.frame, display: true, animate: false)
@@ -1026,38 +1030,41 @@ extension ContentView {
         applyWindowPresentation(window: window, fullscreen: preferredFullscreen)
     }
 
-    func ensureFullscreen(window: NSWindow, remainingRetries: Int) {
-        guard remainingRetries > 0 else { return }
-        if window.styleMask.contains(.fullScreen) { return }
-
-        window.toggleFullScreen(nil)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-            ensureFullscreen(window: window, remainingRetries: remainingRetries - 1)
-        }
-    }
-
-    func ensureWindowed(window: NSWindow, remainingRetries: Int) {
-        guard remainingRetries > 0 else { return }
-        if window.styleMask.contains(.fullScreen) == false { return }
-
-        window.toggleFullScreen(nil)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-            ensureWindowed(window: window, remainingRetries: remainingRetries - 1)
-        }
-    }
-
     func applyWindowPresentation(window: NSWindow, fullscreen: Bool) {
-        if fullscreen {
-            ensureFullscreen(window: window, remainingRetries: 8)
-        } else {
-            ensureWindowed(window: window, remainingRetries: 8)
+        let isFullscreen = window.styleMask.contains(.fullScreen)
+        if isFullscreen == fullscreen { return }
+
+        if NSApp.activationPolicy() != .regular {
+            NSApp.setActivationPolicy(.regular)
+        }
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        window.toggleFullScreen(nil)
+        verifyWindowPresentation(window: window, fullscreen: fullscreen, remainingChecks: 10)
+    }
+
+    func verifyWindowPresentation(window: NSWindow, fullscreen: Bool, remainingChecks: Int) {
+        guard remainingChecks > 0 else {
+            let isFullscreen = window.styleMask.contains(.fullScreen)
+            if isFullscreen != fullscreen {
+                window.makeKeyAndOrderFront(nil)
+                NSApp.activate(ignoringOtherApps: true)
+                window.toggleFullScreen(nil)
+            }
+            return
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+            let isFullscreen = window.styleMask.contains(.fullScreen)
+            if isFullscreen == fullscreen { return }
+            verifyWindowPresentation(window: window, fullscreen: fullscreen, remainingChecks: remainingChecks - 1)
         }
     }
 
     func setPreferredFullscreen(_ fullscreen: Bool) {
         preferredFullscreen = fullscreen
         saveModeVisibilitySettings()
-        guard let window = hostWindow else { return }
+        guard let window = presentationWindow() else { return }
         applyWindowPresentation(window: window, fullscreen: fullscreen)
     }
 
