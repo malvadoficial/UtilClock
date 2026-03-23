@@ -18,6 +18,7 @@ import ServiceManagement
 @main
 struct UtilClockApp: App {
     #if os(macOS)
+    @NSApplicationDelegateAdaptor(MacAppDelegate.self) private var appDelegate
     @AppStorage("alwaysOnTop") private var alwaysOnTop = false
     @AppStorage("utilclock.presentation.menuBarOnly") private var menuBarOnlyMode = false
     @State private var statusBarController = StatusBarController()
@@ -37,6 +38,9 @@ struct UtilClockApp: App {
                 #if os(macOS)
                 .background(BorderlessWindowConfigurator(alwaysOnTop: alwaysOnTop))
                 .onAppear {
+                    appDelegate.reopenHandler = { [self] in
+                        recoverMainWindowVisibility(triggeredByWake: false)
+                    }
                     applyPresentationMode()
                 }
                 .onReceive(NotificationCenter.default.publisher(for: NSWindow.didEnterFullScreenNotification)) { _ in
@@ -53,6 +57,12 @@ struct UtilClockApp: App {
                 }
                 .onChange(of: alwaysOnTop) { _, _ in
                     applyPresentationMode()
+                }
+                .onReceive(NotificationCenter.default.publisher(for: NSWorkspace.didWakeNotification)) { _ in
+                    recoverMainWindowVisibility(triggeredByWake: true)
+                }
+                .onReceive(NotificationCenter.default.publisher(for: NSApplication.didChangeScreenParametersNotification)) { _ in
+                    recoverMainWindowVisibility(triggeredByWake: true)
                 }
                 #endif
                 #if os(iOS) || os(tvOS)
@@ -110,6 +120,13 @@ private extension UtilClockApp {
             NSApp.setActivationPolicy(targetPolicy)
         }
 
+        let targetPresentationOptions: NSApplication.PresentationOptions = isFullscreen
+            ? [.autoHideMenuBar, .autoHideDock]
+            : []
+        if NSApp.presentationOptions != targetPresentationOptions {
+            NSApp.presentationOptions = targetPresentationOptions
+        }
+
         if pendingAccessoryActivation, isFullscreen == false, menuBarOnlyMode {
             pendingAccessoryActivation = false
             if NSApp.activationPolicy() != .accessory {
@@ -128,6 +145,34 @@ private extension UtilClockApp {
         let targetWindow = NSApp.keyWindow ?? NSApp.mainWindow ?? NSApp.windows.first
         targetWindow?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    func recoverMainWindowVisibility(triggeredByWake: Bool, remainingAttempts: Int = 4) {
+        applyPresentationMode()
+
+        guard menuBarOnlyMode == false else { return }
+        guard remainingAttempts > 0 else { return }
+        guard let targetWindow = NSApp.keyWindow ?? NSApp.mainWindow ?? NSApp.windows.first else { return }
+
+        NSApp.unhide(nil)
+
+        if targetWindow.isMiniaturized {
+            targetWindow.deminiaturize(nil)
+        }
+
+        normalizeWindowPositionIfNeeded(targetWindow)
+        targetWindow.orderFrontRegardless()
+        targetWindow.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+
+        if triggeredByWake {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                let windowIsVisible = targetWindow.isVisible && targetWindow.occlusionState.contains(.visible)
+                if windowIsVisible == false {
+                    recoverMainWindowVisibility(triggeredByWake: true, remainingAttempts: remainingAttempts - 1)
+                }
+            }
+        }
     }
 
     func toggleFullscreen() {
@@ -159,6 +204,20 @@ private extension UtilClockApp {
         (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value
     }
 
+    func normalizeWindowPositionIfNeeded(_ window: NSWindow) {
+        let availableScreens = NSScreen.screens
+        guard let fallbackScreen = NSScreen.main ?? availableScreens.first else { return }
+
+        let windowFrame = window.frame
+        let isOnAnyScreen = availableScreens
+            .map(\.visibleFrame)
+            .contains { $0.intersects(windowFrame) }
+
+        guard window.screen == nil || isOnAnyScreen == false else { return }
+
+        window.setFrame(fallbackScreen.frame, display: true, animate: false)
+    }
+
     func disableLegacyLaunchAtLogin() {
         do {
             if SMAppService.mainApp.status == .enabled {
@@ -167,6 +226,15 @@ private extension UtilClockApp {
         } catch {
             // Ignore errors; the app must continue even if cleanup fails.
         }
+    }
+}
+
+private final class MacAppDelegate: NSObject, NSApplicationDelegate {
+    var reopenHandler: (() -> Void)?
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        reopenHandler?()
+        return true
     }
 }
 

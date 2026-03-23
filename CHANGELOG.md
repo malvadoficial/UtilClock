@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.2.10 - 2026-03-23
+
+- Window and fullscreen reliability on macOS:
+  - Added wake-from-sleep recovery to restore the main window when the app remained running but became invisible.
+  - Added reopen handling and off-screen window recovery after display changes.
+  - Forced cleaner fullscreen presentation by auto-hiding menu bar and Dock while fullscreen is active.
+- `Ver Videos` improvements:
+  - Added optional clock overlay during video playback, matching the existing photos experience.
+  - Persisted the new `Mostrar reloj` preference for videos.
+
 ## v1.2.9 - 2026-03-05
 
 - Fullscreen/window mode fixes:

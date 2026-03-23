@@ -38,12 +38,14 @@ Esta aplicación se ha desarrollado utilizando **Codex de OpenAI** y está pensa
   - Recordar pantalla de inicio y opción para olvidar selección guardada
   - Elegir presentación de la app: `Dock` o `Barra de menús`
 
-## Novedades recientes (v1.2.7)
+## Novedades recientes (v1.2.10)
 
-- Eliminada por completo la funcionalidad de `Auto-inicio`:
-  - Retirado de ajustes y menú de barra.
-  - Limpieza automática de registro legado al arrancar la app.
-- Conservadas y operativas el resto de funciones de presentación (`Dock` / `Barra de menús`) y utilidades.
+- Correcciones de ventana y fullscreen en macOS:
+  - Recuperación automática al volver del reposo cuando la app seguía viva pero la ventana desaparecía.
+  - Restauración al reabrir la app y recolocación si la ventana queda fuera de pantalla tras cambios de monitor.
+  - Pantalla completa más limpia, ocultando barra de menús y Dock.
+- `Ver Videos`:
+  - Nueva opción `Mostrar reloj` durante la reproducción, igual que en `Ver Fotos`.
 
 ## Capturas
 

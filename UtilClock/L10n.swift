@@ -143,6 +143,10 @@ enum L10n {
         text(es: "sonido", en: "sound")
     }
 
+    static var videosShowClock: String {
+        text(es: "mostrar reloj", en: "show clock")
+    }
+
     static var photosAlbumButton: String {
         text(es: "album fotos", en: "photos album")
     }

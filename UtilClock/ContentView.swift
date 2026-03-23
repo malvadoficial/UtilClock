@@ -811,6 +811,7 @@ struct ContentView: View {
     @State var videosIsRunning = false
     @State var videosSoundEnabled = true
     @State var videosShuffle = true
+    @State var videosShowClock = true
     @State var videosSourceType = "folder"
     @State var videosSelectedAlbumID = ""
     @State var videosSelectedAlbumName = ""
