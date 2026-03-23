@@ -53,6 +53,22 @@ extension ContentView {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
 
+            if videosShowClock {
+                VStack {
+                    HStack {
+                        Text(viewModel.hourMinuteText)
+                            .font(displayFont(size: 88, weight: .bold))
+                            .foregroundStyle(photosClockColor)
+                            .shadow(color: Color.black.opacity(0.55), radius: 7)
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.top, 38)
+                    .padding(.leading, 24)
+                    Spacer(minLength: 0)
+                }
+                .allowsHitTesting(false)
+            }
+
             if videosTitleVisible || videosShowControls {
                 VStack {
                     Text(videosCurrentTitle)
@@ -211,6 +227,15 @@ extension ContentView {
                             }
                             .toggleStyle(.switch)
                             .onChange(of: videosShuffle) { _, _ in saveVideoModeSettings() }
+                        }
+                        HStack(spacing: 10) {
+                            Toggle(isOn: $videosShowClock) {
+                                Text(L10n.videosShowClock)
+                                    .font(.system(size: max(14, dateSize * 0.9), weight: .regular, design: .monospaced))
+                                    .foregroundStyle(phosphorColor)
+                            }
+                            .toggleStyle(.switch)
+                            .onChange(of: videosShowClock) { _, _ in saveVideoModeSettings() }
                         }
                     }
                     .frame(width: rightColWidth, alignment: .trailing)
@@ -776,6 +801,7 @@ extension ContentView {
         defaults.set(videosSelectedFolderPath, forKey: "utilclock.videos.folderPath")
         defaults.set(videosSoundEnabled, forKey: "utilclock.videos.sound")
         defaults.set(videosShuffle, forKey: "utilclock.videos.shuffle")
+        defaults.set(videosShowClock, forKey: "utilclock.videos.showClock")
         defaults.set(videosSelectedFolderBookmark, forKey: "utilclock.videos.folderBookmark")
         defaults.set(videosSourceType, forKey: "utilclock.videos.sourceType")
         defaults.set(videosSelectedAlbumID, forKey: "utilclock.videos.albumID")
@@ -803,6 +829,7 @@ extension ContentView {
         videosSelectedFolderPath = defaults.string(forKey: "utilclock.videos.folderPath") ?? ""
         videosSoundEnabled = defaults.object(forKey: "utilclock.videos.sound") as? Bool ?? true
         videosShuffle = defaults.object(forKey: "utilclock.videos.shuffle") as? Bool ?? true
+        videosShowClock = defaults.object(forKey: "utilclock.videos.showClock") as? Bool ?? true
         videosSelectedFolderBookmark = defaults.data(forKey: "utilclock.videos.folderBookmark")
         videosSourceType = defaults.string(forKey: "utilclock.videos.sourceType") ?? "folder"
         videosSelectedAlbumID = defaults.string(forKey: "utilclock.videos.albumID") ?? ""
