@@ -21,6 +21,7 @@ struct UtilClockApp: App {
     @NSApplicationDelegateAdaptor(MacAppDelegate.self) private var appDelegate
     @AppStorage("alwaysOnTop") private var alwaysOnTop = false
     @AppStorage("utilclock.presentation.menuBarOnly") private var menuBarOnlyMode = false
+    @AppStorage("utilclock.window.preferredFullscreen") private var preferredFullscreen = true
     @State private var statusBarController = StatusBarController()
     @State private var pendingAccessoryActivation = false
     #endif
@@ -97,8 +98,10 @@ struct UtilClockApp: App {
 
 #if os(macOS)
 private extension UtilClockApp {
+    var startupDisplaySelectionKey: String { "utilclock.startup.selectedDisplayID" }
+
     func applyPresentationMode() {
-        let targetWindow = NSApp.keyWindow ?? NSApp.mainWindow ?? NSApp.windows.first
+        let targetWindow = mainAppWindow()
         let isFullscreen = targetWindow?.styleMask.contains(.fullScreen) ?? false
 
         let targetPolicy: NSApplication.ActivationPolicy
@@ -142,8 +145,19 @@ private extension UtilClockApp {
     }
 
     func showMainWindow() {
-        let targetWindow = NSApp.keyWindow ?? NSApp.mainWindow ?? NSApp.windows.first
-        targetWindow?.makeKeyAndOrderFront(nil)
+        guard let targetWindow = mainAppWindow() else { return }
+        bringWindowToFront(targetWindow)
+    }
+
+    func mainAppWindow() -> NSWindow? {
+        NSApp.keyWindow ?? NSApp.mainWindow ?? NSApp.windows.first(where: { $0.isVisible }) ?? NSApp.windows.first
+    }
+
+    func bringWindowToFront(_ window: NSWindow) {
+        window.collectionBehavior.formUnion([.moveToActiveSpace, .canJoinAllSpaces])
+        NSApp.unhide(nil)
+        window.orderFrontRegardless()
+        window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
 
@@ -152,7 +166,7 @@ private extension UtilClockApp {
 
         guard menuBarOnlyMode == false else { return }
         guard remainingAttempts > 0 else { return }
-        guard let targetWindow = NSApp.keyWindow ?? NSApp.mainWindow ?? NSApp.windows.first else { return }
+        guard let targetWindow = mainAppWindow() else { return }
 
         NSApp.unhide(nil)
 
@@ -161,14 +175,14 @@ private extension UtilClockApp {
         }
 
         normalizeWindowPositionIfNeeded(targetWindow)
-        targetWindow.orderFrontRegardless()
-        targetWindow.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        bringWindowToFront(targetWindow)
 
         if triggeredByWake {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
-                let windowIsVisible = targetWindow.isVisible && targetWindow.occlusionState.contains(.visible)
+                let windowIsVisible = targetWindow.isVisible &&
+                    (targetWindow.occlusionState.contains(.visible) || targetWindow.styleMask.contains(.fullScreen))
                 if windowIsVisible == false {
+                    hardResetWindowVisibility(targetWindow)
                     recoverMainWindowVisibility(triggeredByWake: true, remainingAttempts: remainingAttempts - 1)
                 }
             }
@@ -176,12 +190,12 @@ private extension UtilClockApp {
     }
 
     func toggleFullscreen() {
-        let targetWindow = NSApp.keyWindow ?? NSApp.mainWindow ?? NSApp.windows.first
+        let targetWindow = mainAppWindow()
         targetWindow?.toggleFullScreen(nil)
     }
 
     func moveMainWindowToScreen(_ targetScreenID: UInt32) {
-        guard let window = NSApp.keyWindow ?? NSApp.mainWindow ?? NSApp.windows.first else { return }
+        guard let window = mainAppWindow() else { return }
         guard let targetScreen = NSScreen.screens.first(where: { screenID(for: $0) == targetScreenID }) else { return }
 
         let wasFullscreen = window.styleMask.contains(.fullScreen)
@@ -215,7 +229,48 @@ private extension UtilClockApp {
 
         guard window.screen == nil || isOnAnyScreen == false else { return }
 
-        window.setFrame(fallbackScreen.frame, display: true, animate: false)
+        window.setFrame(fallbackScreen.visibleFrame, display: true, animate: false)
+    }
+
+    func hardResetWindowVisibility(_ window: NSWindow) {
+        guard let fallbackScreen = preferredRecoveryScreen(for: window) else { return }
+        let restoreFullscreen = preferredFullscreen
+        let isFullscreen = window.styleMask.contains(.fullScreen)
+
+        let relocateWindow = {
+            window.setFrame(restoreFullscreen ? fallbackScreen.frame : fallbackScreen.visibleFrame, display: true, animate: false)
+            bringWindowToFront(window)
+            if restoreFullscreen && window.styleMask.contains(.fullScreen) == false {
+                window.toggleFullScreen(nil)
+            }
+        }
+
+        if isFullscreen {
+            if NSApp.activationPolicy() != .regular {
+                NSApp.setActivationPolicy(.regular)
+            }
+            bringWindowToFront(window)
+            window.toggleFullScreen(nil)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+                relocateWindow()
+            }
+        } else {
+            relocateWindow()
+        }
+    }
+
+    func preferredRecoveryScreen(for window: NSWindow) -> NSScreen? {
+        if let savedScreenID = UserDefaults.standard.object(forKey: startupDisplaySelectionKey) as? Int,
+           let selectedScreen = NSScreen.screens.first(where: { screenID(for: $0) == UInt32(savedScreenID) }) {
+            return selectedScreen
+        }
+
+        if let currentScreen = window.screen,
+           NSScreen.screens.contains(where: { screenID(for: $0) == screenID(for: currentScreen) }) {
+            return currentScreen
+        }
+
+        return NSScreen.main ?? NSScreen.screens.first
     }
 
     func disableLegacyLaunchAtLogin() {
@@ -390,7 +445,7 @@ private struct BorderlessWindowConfigurator: NSViewRepresentable {
             window.standardWindowButton(.closeButton)?.isHidden = true
             window.standardWindowButton(.miniaturizeButton)?.isHidden = true
             window.standardWindowButton(.zoomButton)?.isHidden = true
-            window.collectionBehavior = [.fullScreenPrimary, .fullScreenAllowsTiling, .canJoinAllSpaces]
+            window.collectionBehavior = [.fullScreenPrimary, .fullScreenAllowsTiling, .canJoinAllSpaces, .moveToActiveSpace]
             coordinator.configuredWindowNumber = window.windowNumber
         }
 

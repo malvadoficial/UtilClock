@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.2.11 - 2026-03-24
+
+- Window recovery after sleep/display changes on macOS:
+  - Improved wake-from-sleep recovery to bring the main window back to the active Space.
+  - Added a stronger fallback path that recenters the window on a valid display when AppKit keeps it running but invisible.
+  - Restored the preferred fullscreen state after forced window recovery.
+
 ## v1.2.10 - 2026-03-23
 
 - Window and fullscreen reliability on macOS:
