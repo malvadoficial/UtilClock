@@ -5,6 +5,152 @@ import UniformTypeIdentifiers
 #endif
 
 extension ContentView {
+    var allTopScreenModes: [ScreenModeItem] {
+        topScreenModeOrder
+    }
+
+    var allBottomScreenModes: [ScreenModeItem] {
+        bottomScreenModeOrder
+    }
+
+    func screenModeLabel(for item: ScreenModeItem) -> String {
+        switch item {
+        case .top(let mode):
+            return topModeLabel(for: mode)
+        case .utility(let mode):
+            return utilityModeLabel(for: mode)
+        }
+    }
+
+    func isScreenModeEnabled(_ item: ScreenModeItem) -> Bool {
+        switch item {
+        case .top(let mode):
+            return enabledTopModes.contains(mode)
+        case .utility(let mode):
+            return enabledUtilityModes.contains(mode)
+        }
+    }
+
+    func setScreenMode(_ item: ScreenModeItem, enabled: Bool) {
+        switch item {
+        case .top(let mode):
+            setTopMode(mode, enabled: enabled)
+        case .utility(let mode):
+            setUtilityMode(mode, enabled: enabled)
+        }
+
+        if enabled == false {
+            if topScreenSelectedMode == item, let fallback = firstEnabledMode(in: topScreenModeOrder) {
+                activateScreenMode(fallback, on: .top)
+            }
+            if bottomScreenSelectedMode == item, let fallback = firstEnabledMode(in: bottomScreenModeOrder) {
+                activateScreenMode(fallback, on: .bottom)
+            }
+        }
+        saveModeVisibilitySettings()
+    }
+
+    func enabledModes(in items: [ScreenModeItem]) -> [ScreenModeItem] {
+        let modes = items.filter { isScreenModeEnabled($0) }
+        return modes.isEmpty ? items : modes
+    }
+
+    func screenModeItem(forKey key: String) -> ScreenModeItem? {
+        let raw = key.split(separator: ":", maxSplits: 1).map(String.init)
+        if raw.count == 2 {
+            if raw[0] == "top", let mode = TopClockMode.allCases.first(where: { $0.key == raw[1] }) {
+                return .top(mode)
+            }
+            if raw[0] == "utility", let mode = UtilityMode.allCases.first(where: { $0.key == raw[1] }) {
+                return .utility(mode)
+            }
+        }
+
+        if let mode = TopClockMode.allCases.first(where: { $0.key == key }) {
+            return .top(mode)
+        }
+        if let mode = UtilityMode.allCases.first(where: { $0.key == key }) {
+            return .utility(mode)
+        }
+        return nil
+    }
+
+    func firstEnabledMode(in items: [ScreenModeItem], topFamily: Bool? = nil) -> ScreenModeItem? {
+        enabledModes(in: items).first { item in
+            guard let topFamily else { return true }
+            return item.isTopFamily == topFamily
+        }
+    }
+
+    func activateScreenMode(_ item: ScreenModeItem, on screen: ScreenSlot) {
+        switch item {
+        case .top(let mode):
+            if screen == .top {
+                topScreenTopMode = mode
+            } else {
+                bottomScreenTopMode = mode
+            }
+        case .utility(let mode):
+            if screen == .top {
+                topScreenUtilityMode = mode
+            } else {
+                bottomScreenUtilityMode = mode
+            }
+            handleUtilityModeActivation(mode)
+        }
+
+        if screen == .top {
+            topScreenSelectedMode = item
+        } else {
+            bottomScreenSelectedMode = item
+        }
+    }
+
+    func moveScreenMode(_ item: ScreenModeItem, to screen: ScreenSlot) {
+        let sourceItems = screen == .top ? bottomScreenModeOrder : topScreenModeOrder
+        guard sourceItems.count > 1 else { return }
+
+        if screen == .top {
+            bottomScreenModeOrder.removeAll { $0 == item }
+            if topScreenModeOrder.contains(item) == false {
+                topScreenModeOrder.append(item)
+            }
+        } else {
+            topScreenModeOrder.removeAll { $0 == item }
+            if bottomScreenModeOrder.contains(item) == false {
+                bottomScreenModeOrder.append(item)
+            }
+        }
+
+        let otherScreen: ScreenSlot = screen == .top ? .bottom : .top
+        let otherItems = otherScreen == .top ? topScreenModeOrder : bottomScreenModeOrder
+        let otherSelected = otherScreen == .top ? topScreenSelectedMode : bottomScreenSelectedMode
+        if otherItems.contains(otherSelected) == false,
+           let fallback = firstEnabledMode(in: otherItems) {
+            if screen == .top {
+                activateScreenMode(fallback, on: .bottom)
+            } else {
+                activateScreenMode(fallback, on: .top)
+            }
+        }
+
+        saveModeVisibilitySettings()
+    }
+
+    func rotateScreenMode(on screen: ScreenSlot, forward: Bool) {
+        let modes = enabledModes(in: screen == .top ? topScreenModeOrder : bottomScreenModeOrder)
+        guard modes.isEmpty == false else { return }
+        let current = screen == .top ? topScreenSelectedMode : bottomScreenSelectedMode
+        guard let currentIndex = modes.firstIndex(of: current) else {
+            activateScreenMode(modes[0], on: screen)
+            return
+        }
+        let nextIndex = forward
+            ? (currentIndex + 1) % modes.count
+            : (currentIndex - 1 + modes.count) % modes.count
+        activateScreenMode(modes[nextIndex], on: screen)
+    }
+
     var settingsView: some View {
         ZStack {
             Color.black.opacity(0.96)
@@ -136,28 +282,34 @@ extension ContentView {
                             .foregroundStyle(phosphorDim)
 
                         VStack(spacing: 7) {
-                            ForEach(topModeOrder, id: \.self) { mode in
+                            ForEach(allTopScreenModes, id: \.self) { item in
                                 HStack(spacing: 10) {
                                     Text("≡")
                                         .font(.system(size: 14, weight: .semibold, design: .monospaced))
                                         .foregroundStyle(phosphorDim)
                                         .onDrag {
-                                            draggedTopMode = mode
-                                            return NSItemProvider(object: NSString(string: mode.key))
+                                            draggedScreenMode = item
+                                            return NSItemProvider(object: NSString(string: item.key))
                                         }
                                     Button(action: {
-                                        setTopMode(mode, enabled: enabledTopModes.contains(mode) == false)
+                                        setScreenMode(item, enabled: isScreenModeEnabled(item) == false)
                                     }) {
-                                        Image(systemName: enabledTopModes.contains(mode) ? "checkmark.square.fill" : "square")
+                                        Image(systemName: isScreenModeEnabled(item) ? "checkmark.square.fill" : "square")
                                             .font(.system(size: 17, weight: .medium))
-                                            .foregroundStyle(enabledTopModes.contains(mode) ? phosphorColor : phosphorDim)
+                                            .foregroundStyle(isScreenModeEnabled(item) ? phosphorColor : phosphorDim)
                                     }
                                     .buttonStyle(.plain)
-                                    
-                                    Text(topModeLabel(for: mode))
+
+                                    Text(screenModeLabel(for: item))
                                         .font(.system(size: 18, weight: .regular, design: .monospaced))
                                         .foregroundStyle(phosphorColor)
                                     Spacer(minLength: 0)
+                                    Button(action: { moveScreenMode(item, to: .bottom) }) {
+                                        Image(systemName: "arrow.down")
+                                            .font(.system(size: 14, weight: .semibold))
+                                            .foregroundStyle(phosphorColor)
+                                    }
+                                    .buttonStyle(.plain)
                                 }
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 8)
@@ -166,10 +318,10 @@ extension ContentView {
                                     RoundedRectangle(cornerRadius: 6, style: .continuous)
                                         .stroke(phosphorColor.opacity(0.2), lineWidth: 1)
                                 )
-                                .onDrop(of: [UTType.text], delegate: TopModeDropDelegate(
-                                    target: mode,
-                                    items: $topModeOrder,
-                                    draggedItem: $draggedTopMode,
+                                .onDrop(of: [UTType.text], delegate: ScreenModeDropDelegate(
+                                    target: item,
+                                    items: $topScreenModeOrder,
+                                    draggedItem: $draggedScreenMode,
                                     onReorder: { saveModeVisibilitySettings() }
                                 ))
                             }
@@ -187,33 +339,33 @@ extension ContentView {
                             .foregroundStyle(phosphorDim)
 
                         VStack(spacing: 7) {
-                            ForEach(utilityModeOrder, id: \.self) { mode in
+                            ForEach(allBottomScreenModes, id: \.self) { item in
                                 HStack(spacing: 12) {
                                     Text("≡")
                                         .font(.system(size: 14, weight: .semibold, design: .monospaced))
                                         .foregroundStyle(phosphorDim)
                                         .frame(width: 18, alignment: .center)
                                         .onDrag {
-                                            draggedUtilityMode = mode
-                                            return NSItemProvider(object: NSString(string: mode.key))
+                                            draggedScreenMode = item
+                                            return NSItemProvider(object: NSString(string: item.key))
                                         }
                                     Button(action: {
-                                        setUtilityMode(mode, enabled: enabledUtilityModes.contains(mode) == false)
+                                        setScreenMode(item, enabled: isScreenModeEnabled(item) == false)
                                     }) {
-                                        Image(systemName: enabledUtilityModes.contains(mode) ? "checkmark.square.fill" : "square")
+                                        Image(systemName: isScreenModeEnabled(item) ? "checkmark.square.fill" : "square")
                                             .font(.system(size: 17, weight: .medium))
-                                            .foregroundStyle(enabledUtilityModes.contains(mode) ? phosphorColor : phosphorDim)
+                                            .foregroundStyle(isScreenModeEnabled(item) ? phosphorColor : phosphorDim)
                                     }
                                     .buttonStyle(.plain)
                                     .frame(width: 22, alignment: .center)
-                                    Text(utilityModeLabel(for: mode))
+                                    Text(screenModeLabel(for: item))
                                         .font(.system(size: 18, weight: .regular, design: .monospaced))
                                         .foregroundStyle(phosphorColor)
                                         .frame(width: 210, alignment: .leading)
 
                                     Spacer(minLength: 0)
 
-                                    if mode == .games {
+                                    if item == .utility(.games) {
                                         Text("pong \(pongFieldSizeLevel)")
                                             .font(.system(size: 16, weight: .semibold, design: .monospaced))
                                             .foregroundStyle(phosphorDim)
@@ -309,6 +461,13 @@ extension ContentView {
                                             }
                                             #endif
                                     }
+
+                                    Button(action: { moveScreenMode(item, to: .top) }) {
+                                        Image(systemName: "arrow.up")
+                                            .font(.system(size: 14, weight: .semibold))
+                                            .foregroundStyle(phosphorColor)
+                                    }
+                                    .buttonStyle(.plain)
                                 }
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 8)
@@ -317,10 +476,10 @@ extension ContentView {
                                     RoundedRectangle(cornerRadius: 6, style: .continuous)
                                         .stroke(phosphorColor.opacity(0.2), lineWidth: 1)
                                 )
-                                .onDrop(of: [UTType.text], delegate: UtilityModeDropDelegate(
-                                    target: mode,
-                                    items: $utilityModeOrder,
-                                    draggedItem: $draggedUtilityMode,
+                                .onDrop(of: [UTType.text], delegate: ScreenModeDropDelegate(
+                                    target: item,
+                                    items: $bottomScreenModeOrder,
+                                    draggedItem: $draggedScreenMode,
                                     onReorder: { saveModeVisibilitySettings() }
                                 ))
                             }
@@ -429,10 +588,18 @@ extension ContentView {
         } else if enabledTopModes.count > 1 {
             enabledTopModes.remove(mode)
         }
-        if enabledTopModes.contains(topMode) == false, let fallback = orderedEnabledTopModes().first {
-            topMode = fallback
+        if enabledTopModes.contains(topScreenTopMode) == false, let fallback = orderedEnabledTopModes().first {
+            topScreenTopMode = fallback
+            if topScreenSelectedMode.isTopFamily {
+                topScreenSelectedMode = .top(fallback)
+            }
         }
-        saveModeVisibilitySettings()
+        if enabledTopModes.contains(bottomScreenTopMode) == false, let fallback = orderedEnabledTopModes().first {
+            bottomScreenTopMode = fallback
+            if bottomScreenSelectedMode.isTopFamily {
+                bottomScreenSelectedMode = .top(fallback)
+            }
+        }
     }
 
     func setUtilityMode(_ mode: UtilityMode, enabled: Bool) {
@@ -441,11 +608,20 @@ extension ContentView {
         } else if enabledUtilityModes.count > 1 {
             enabledUtilityModes.remove(mode)
         }
-        if enabledUtilityModes.contains(utilityMode) == false, let fallback = orderedEnabledUtilityModes().first {
-            utilityMode = fallback
+        if enabledUtilityModes.contains(topScreenUtilityMode) == false, let fallback = orderedEnabledUtilityModes().first {
+            topScreenUtilityMode = fallback
+            if topScreenSelectedMode.isTopFamily == false {
+                topScreenSelectedMode = .utility(fallback)
+            }
             handleUtilityModeActivation(fallback)
         }
-        saveModeVisibilitySettings()
+        if enabledUtilityModes.contains(bottomScreenUtilityMode) == false, let fallback = orderedEnabledUtilityModes().first {
+            bottomScreenUtilityMode = fallback
+            if bottomScreenSelectedMode.isTopFamily == false {
+                bottomScreenSelectedMode = .utility(fallback)
+            }
+            handleUtilityModeActivation(fallback)
+        }
     }
 
     func orderedEnabledTopModes() -> [TopClockMode] {
@@ -486,34 +662,6 @@ extension ContentView {
     func moveUtilityModes(from source: IndexSet, to destination: Int) {
         utilityModeOrder.move(fromOffsets: source, toOffset: destination)
         saveModeVisibilitySettings()
-    }
-
-    func rotateTopMode(forward: Bool) {
-        let modes = orderedEnabledTopModes()
-        guard let currentIndex = modes.firstIndex(of: topMode) else {
-            topMode = modes.first ?? .clock
-            return
-        }
-        let nextIndex = forward
-            ? (currentIndex + 1) % modes.count
-            : (currentIndex - 1 + modes.count) % modes.count
-        topMode = modes[nextIndex]
-    }
-
-    func rotateUtilityMode(forward: Bool) {
-        let modes = orderedEnabledUtilityModes()
-        guard let currentIndex = modes.firstIndex(of: utilityMode) else {
-            let fallback = modes.first ?? .audio
-            utilityMode = fallback
-            handleUtilityModeActivation(fallback)
-            return
-        }
-        let nextIndex = forward
-            ? (currentIndex + 1) % modes.count
-            : (currentIndex - 1 + modes.count) % modes.count
-        let nextMode = modes[nextIndex]
-        utilityMode = nextMode
-        handleUtilityModeActivation(nextMode)
     }
 
     func handleUtilityModeActivation(_ mode: UtilityMode) {
@@ -618,6 +766,28 @@ extension ContentView {
             }
         }
 
+        if let storedTopScreenOrder = defaults.array(forKey: "utilclock.topScreenModeOrder") as? [String] {
+            let restored = storedTopScreenOrder.compactMap(screenModeItem(forKey:))
+            let missing = ScreenModeItem.allCases.filter { restored.contains($0) == false && bottomScreenModeOrder.contains($0) == false }
+            let merged = restored + missing
+            if merged.isEmpty == false {
+                topScreenModeOrder = merged
+            }
+        } else {
+            topScreenModeOrder = topModeOrder.map { .top($0) }
+        }
+
+        if let storedBottomScreenOrder = defaults.array(forKey: "utilclock.bottomScreenModeOrder") as? [String] {
+            let restored = storedBottomScreenOrder.compactMap(screenModeItem(forKey:))
+            let missing = ScreenModeItem.allCases.filter { restored.contains($0) == false && topScreenModeOrder.contains($0) == false }
+            let merged = restored + missing
+            if merged.isEmpty == false {
+                bottomScreenModeOrder = merged
+            }
+        } else {
+            bottomScreenModeOrder = utilityModeOrder.map { .utility($0) }
+        }
+
         if defaults.object(forKey: preferredFullscreenKey) != nil {
             preferredFullscreen = defaults.bool(forKey: preferredFullscreenKey)
         } else {
@@ -676,15 +846,52 @@ extension ContentView {
             artilleryWindEnabled = false
         }
 
-        if enabledTopModes.contains(topMode) == false, let first = orderedEnabledTopModes().first {
-            topMode = first
-        } else if let first = orderedEnabledTopModes().first {
-            topMode = first
+        topScreenModeOrder = normalizedScreenModeOrder(
+            topScreenModeOrder,
+            excluding: []
+        )
+        bottomScreenModeOrder = normalizedScreenModeOrder(
+            bottomScreenModeOrder,
+            excluding: topScreenModeOrder
+        )
+
+        let assignedItems = Set(topScreenModeOrder + bottomScreenModeOrder)
+        let missingItems = ScreenModeItem.allCases.filter { assignedItems.contains($0) == false }
+        if missingItems.isEmpty == false {
+            bottomScreenModeOrder.append(contentsOf: missingItems)
         }
-        if enabledUtilityModes.contains(utilityMode) == false, let first = orderedEnabledUtilityModes().first {
-            utilityMode = first
-        } else if let first = orderedEnabledUtilityModes().first {
-            utilityMode = first
+
+        let defaultTopMode = orderedEnabledTopModes().first ?? .clock
+        let defaultUtilityMode = orderedEnabledUtilityModes().first ?? .audio
+
+        topScreenSelectedMode = firstEnabledMode(in: topScreenModeOrder) ?? .top(defaultTopMode)
+        bottomScreenSelectedMode = firstEnabledMode(in: bottomScreenModeOrder) ?? .utility(defaultUtilityMode)
+
+        topScreenTopMode = defaultTopMode
+        bottomScreenTopMode = defaultTopMode
+        topScreenUtilityMode = defaultUtilityMode
+        bottomScreenUtilityMode = defaultUtilityMode
+
+        if case .top(let mode) = topScreenSelectedMode {
+            topScreenTopMode = mode
+        }
+        if case .top(let mode) = bottomScreenSelectedMode {
+            bottomScreenTopMode = mode
+        }
+        if case .utility(let mode) = topScreenSelectedMode {
+            topScreenUtilityMode = mode
+        }
+        if case .utility(let mode) = bottomScreenSelectedMode {
+            bottomScreenUtilityMode = mode
+        }
+    }
+
+    func normalizedScreenModeOrder(_ items: [ScreenModeItem], excluding excludedItems: [ScreenModeItem]) -> [ScreenModeItem] {
+        var seen = Set(excludedItems)
+        return items.filter { item in
+            guard seen.contains(item) == false else { return false }
+            seen.insert(item)
+            return true
         }
     }
 
@@ -695,6 +902,8 @@ extension ContentView {
         defaults.set(orderedEnabledUtilityModes().map(\.key), forKey: "utilclock.enabledUtilityModes")
         defaults.set(topModeOrder.map(\.key), forKey: "utilclock.topModeOrder")
         defaults.set(utilityModeOrder.map(\.key), forKey: "utilclock.utilityModeOrder")
+        defaults.set(topScreenModeOrder.map(\.key), forKey: "utilclock.topScreenModeOrder")
+        defaults.set(bottomScreenModeOrder.map(\.key), forKey: "utilclock.bottomScreenModeOrder")
         defaults.set(max(1, min(4, pongFieldSizeLevel)), forKey: "utilclock.pongFieldSizeLevel")
         defaults.set(max(1, min(4, snakeBoardSizeLevel)), forKey: "utilclock.snakeBoardSizeLevel")
         defaults.set(max(1, min(9, arkanoidPaddleSizeLevel)), forKey: "utilclock.arkanoidPaddleSizeLevel")
@@ -745,7 +954,7 @@ extension ContentView {
     func toggleArtilleryWind() {
         artilleryWindEnabled.toggle()
         saveModeVisibilitySettings()
-        if utilityMode == .games, selectedGameMode == .artillery {
+        if isGameActive(.artillery) {
             randomizeArtilleryWind()
         }
     }

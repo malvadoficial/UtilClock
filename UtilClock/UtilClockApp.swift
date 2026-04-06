@@ -42,6 +42,9 @@ struct UtilClockApp: App {
                     appDelegate.reopenHandler = { [self] in
                         recoverMainWindowVisibility(triggeredByWake: false)
                     }
+                    appDelegate.didBecomeActiveHandler = { [self] in
+                        recoverMainWindowVisibility(triggeredByWake: false)
+                    }
                     applyPresentationMode()
                 }
                 .onReceive(NotificationCenter.default.publisher(for: NSWindow.didEnterFullScreenNotification)) { _ in
@@ -145,7 +148,7 @@ private extension UtilClockApp {
     }
 
     func showMainWindow() {
-        guard let targetWindow = mainAppWindow() else { return }
+        guard let targetWindow = ensureMainWindowAvailable() else { return }
         bringWindowToFront(targetWindow)
     }
 
@@ -153,9 +156,23 @@ private extension UtilClockApp {
         NSApp.keyWindow ?? NSApp.mainWindow ?? NSApp.windows.first(where: { $0.isVisible }) ?? NSApp.windows.first
     }
 
+    func ensureMainWindowAvailable() -> NSWindow? {
+        if let window = mainAppWindow() {
+            return window
+        }
+
+        NSApp.unhide(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        NSRunningApplication.current.activate(options: [.activateAllWindows])
+        NSApp.arrangeInFront(nil)
+
+        return mainAppWindow()
+    }
+
     func bringWindowToFront(_ window: NSWindow) {
         window.collectionBehavior.formUnion([.moveToActiveSpace, .canJoinAllSpaces])
         NSApp.unhide(nil)
+        NSRunningApplication.current.activate(options: [.activateAllWindows])
         window.orderFrontRegardless()
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
@@ -166,7 +183,19 @@ private extension UtilClockApp {
 
         guard menuBarOnlyMode == false else { return }
         guard remainingAttempts > 0 else { return }
-        guard let targetWindow = mainAppWindow() else { return }
+
+        if let targetWindow = ensureMainWindowAvailable() {
+            recoverExistingWindowVisibility(targetWindow, triggeredByWake: triggeredByWake, remainingAttempts: remainingAttempts)
+            return
+        }
+
+        if triggeredByWake {
+            scheduleRecoveryRetry(triggeredByWake: true, remainingAttempts: remainingAttempts - 1, delay: 0.9)
+        }
+    }
+
+    func recoverExistingWindowVisibility(_ targetWindow: NSWindow, triggeredByWake: Bool, remainingAttempts: Int) {
+        guard remainingAttempts > 0 else { return }
 
         NSApp.unhide(nil)
 
@@ -183,9 +212,16 @@ private extension UtilClockApp {
                     (targetWindow.occlusionState.contains(.visible) || targetWindow.styleMask.contains(.fullScreen))
                 if windowIsVisible == false {
                     hardResetWindowVisibility(targetWindow)
-                    recoverMainWindowVisibility(triggeredByWake: true, remainingAttempts: remainingAttempts - 1)
+                    scheduleRecoveryRetry(triggeredByWake: true, remainingAttempts: remainingAttempts - 1, delay: 0.7)
                 }
             }
+        }
+    }
+
+    func scheduleRecoveryRetry(triggeredByWake: Bool, remainingAttempts: Int, delay: TimeInterval) {
+        guard remainingAttempts > 0 else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+            recoverMainWindowVisibility(triggeredByWake: triggeredByWake, remainingAttempts: remainingAttempts)
         }
     }
 
@@ -286,10 +322,15 @@ private extension UtilClockApp {
 
 private final class MacAppDelegate: NSObject, NSApplicationDelegate {
     var reopenHandler: (() -> Void)?
+    var didBecomeActiveHandler: (() -> Void)?
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         reopenHandler?()
         return true
+    }
+
+    func applicationDidBecomeActive(_ notification: Notification) {
+        didBecomeActiveHandler?()
     }
 }
 
@@ -445,7 +486,7 @@ private struct BorderlessWindowConfigurator: NSViewRepresentable {
             window.standardWindowButton(.closeButton)?.isHidden = true
             window.standardWindowButton(.miniaturizeButton)?.isHidden = true
             window.standardWindowButton(.zoomButton)?.isHidden = true
-            window.collectionBehavior = [.fullScreenPrimary, .fullScreenAllowsTiling, .canJoinAllSpaces, .moveToActiveSpace]
+            window.collectionBehavior = [.fullScreenPrimary, .fullScreenAllowsTiling]
             coordinator.configuredWindowNumber = window.windowNumber
         }
 
