@@ -150,6 +150,38 @@ struct ContentView: View {
         }
     }
 
+    enum ScreenModeItem: Hashable {
+        case top(TopClockMode)
+        case utility(UtilityMode)
+
+        static var allCases: [ScreenModeItem] {
+            TopClockMode.allCases.map { .top($0) } + UtilityMode.allCases.map { .utility($0) }
+        }
+
+        var key: String {
+            switch self {
+            case .top(let mode):
+                return "top:\(mode.key)"
+            case .utility(let mode):
+                return "utility:\(mode.key)"
+            }
+        }
+
+        var isTopFamily: Bool {
+            switch self {
+            case .top:
+                return true
+            case .utility:
+                return false
+            }
+        }
+    }
+
+    enum ScreenSlot {
+        case top
+        case bottom
+    }
+
     enum AppsMonitorMode: String, CaseIterable, Hashable {
         case apps
         case processes
@@ -234,38 +266,10 @@ struct ContentView: View {
         let cpuPercent: Double
     }
 
-    struct TopModeDropDelegate: DropDelegate {
-        let target: TopClockMode
-        @Binding var items: [TopClockMode]
-        @Binding var draggedItem: TopClockMode?
-        let onReorder: () -> Void
-
-        func dropEntered(info: DropInfo) {
-            guard let draggedItem,
-                  draggedItem != target,
-                  let from = items.firstIndex(of: draggedItem),
-                  let to = items.firstIndex(of: target) else { return }
-
-            withAnimation {
-                items.move(fromOffsets: IndexSet(integer: from), toOffset: to > from ? (to + 1) : to)
-            }
-            onReorder()
-        }
-
-        func dropUpdated(info: DropInfo) -> DropProposal? {
-            DropProposal(operation: .move)
-        }
-
-        func performDrop(info: DropInfo) -> Bool {
-            draggedItem = nil
-            return true
-        }
-    }
-
-    struct UtilityModeDropDelegate: DropDelegate {
-        let target: UtilityMode
-        @Binding var items: [UtilityMode]
-        @Binding var draggedItem: UtilityMode?
+    struct ScreenModeDropDelegate: DropDelegate {
+        let target: ScreenModeItem
+        @Binding var items: [ScreenModeItem]
+        @Binding var draggedItem: ScreenModeItem?
         let onReorder: () -> Void
 
         func dropEntered(info: DropInfo) {
@@ -469,8 +473,6 @@ struct ContentView: View {
     }
 
     @StateObject var viewModel = ClockViewModel()
-    @State var topMode: TopClockMode = .clock
-    @State var utilityMode: UtilityMode = .audio
     @State var displayPalette: DisplayPalette = .green
     @State var showSettings = false
     @State var showQuitAppConfirmation = false
@@ -478,6 +480,14 @@ struct ContentView: View {
     @State var enabledUtilityModes: Set<UtilityMode> = Set(UtilityMode.allCases)
     @State var topModeOrder: [TopClockMode] = TopClockMode.allCases
     @State var utilityModeOrder: [UtilityMode] = UtilityMode.allCases
+    @State var topScreenModeOrder: [ScreenModeItem] = TopClockMode.allCases.map { .top($0) }
+    @State var bottomScreenModeOrder: [ScreenModeItem] = UtilityMode.allCases.map { .utility($0) }
+    @State var topScreenSelectedMode: ScreenModeItem = .top(.clock)
+    @State var bottomScreenSelectedMode: ScreenModeItem = .utility(.audio)
+    @State var topScreenTopMode: TopClockMode = .clock
+    @State var bottomScreenTopMode: TopClockMode = .clock
+    @State var topScreenUtilityMode: UtilityMode = .audio
+    @State var bottomScreenUtilityMode: UtilityMode = .audio
     @State var countdownSetHours = 0
     @State var countdownSetMinutes = 0
     @State var countdownSetSeconds = 0
@@ -557,8 +567,7 @@ struct ContentView: View {
     @State var photosStartWhenReady = false
     @State var photosSourcesHydrated = false
     #if os(macOS)
-    @State var draggedTopMode: TopClockMode?
-    @State var draggedUtilityMode: UtilityMode?
+    @State var draggedScreenMode: ScreenModeItem?
     @State var hostWindow: NSWindow?
     @State var runningAppsUsage: [RunningAppUsage] = []
     @State var runningProcessesUsage: [RunningProcessUsage] = []
@@ -592,8 +601,12 @@ struct ContentView: View {
     @State var metronomeStrongTickPlayer: AVAudioPlayer?
     @State var housekeepingTimer: Timer?
     @StateObject var tunerEngine = TunerEngine()
-    @State var preAlarmTopMode: TopClockMode?
-    @State var preAlarmUtilityMode: UtilityMode?
+    @State var preAlarmTopScreenSelectedMode: ScreenModeItem?
+    @State var preAlarmBottomScreenSelectedMode: ScreenModeItem?
+    @State var preAlarmTopScreenTopMode: TopClockMode?
+    @State var preAlarmBottomScreenTopMode: TopClockMode?
+    @State var preAlarmTopScreenUtilityMode: UtilityMode?
+    @State var preAlarmBottomScreenUtilityMode: UtilityMode?
     @State var preAlarmMusicMode: MusicMode?
     @State var preAlarmGameMode: GameMode?
     @State var preAlarmInfoMode: InfoMode?
@@ -879,243 +892,21 @@ struct ContentView: View {
                 } else {
                     VStack(spacing: 0) {
                     VStack(spacing: 2) {
-                        if topMode == .calendar {
-                            topCalendarView(dateSize: dateSize)
-                        } else if topMode == .weather {
-                            topWeatherView(dateSize: dateSize, driveTitleSize: driveTitleSize)
-                        } else if topMode == .fullClock {
-                            fullClockView(dateSize: dateSize, mainClockSize: mainClockSize, secondsSize: secondsSize, driveTitleSize: driveTitleSize)
-                        } else if topMode == .stopwatch {
-                            TimelineView(.periodic(from: .now, by: 0.01)) { context in
-                                let stopwatchDisplay = stopwatchDisplayValues(at: context.date)
-                                HStack(alignment: .center, spacing: 16) {
-                                    HStack(alignment: .lastTextBaseline, spacing: 8) {
-                                        Text(String(format: "%02d", stopwatchDisplay.minutes))
-                                            .font(displayFont(size: mainClockSize, weight: .bold))
-                                            .monospacedDigit()
-                                            .shadow(color: phosphorColor.opacity(0.8), radius: 8)
-
-                                        Text(":")
-                                            .font(displayFont(size: mainClockSize, weight: .bold))
-                                            .monospacedDigit()
-                                            .shadow(color: phosphorColor.opacity(0.8), radius: 8)
-                                            .opacity(timeSeparatorOpacity)
-
-                                        Text(String(format: "%02d", stopwatchDisplay.seconds))
-                                            .font(displayFont(size: mainClockSize, weight: .bold))
-                                            .monospacedDigit()
-                                            .shadow(color: phosphorColor.opacity(0.8), radius: 8)
-
-                                        Text(String(format: "%02d", stopwatchDisplay.centiseconds))
-                                            .font(displayFont(size: secondsSize, weight: .bold))
-                                            .monospacedDigit()
-                                            .shadow(color: phosphorColor.opacity(0.7), radius: 6)
-                                    }
-                                    .foregroundStyle(phosphorColor)
-
-                                    VStack(spacing: 14) {
-                                        Button(action: {
-                                            stopwatchPrestartCountdownEnabled.toggle()
-                                        }) {
-                                            Text(stopwatchPreButtonTitle)
-                                                .font(.system(size: max(13, dateSize * 0.88), weight: .semibold, design: .monospaced))
-                                                .foregroundStyle(stopwatchPrestartCountdownEnabled ? phosphorColor : phosphorDim)
-                                                .padding(.horizontal, 12)
-                                                .padding(.vertical, 6)
-                                                .overlay(
-                                                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                                        .stroke((stopwatchPrestartCountdownEnabled ? phosphorColor : phosphorDim).opacity(0.6), lineWidth: 1)
-                                                )
-                                        }
-                                        .buttonStyle(.plain)
-                                        .disabled(stopwatchRunning || stopwatchPrestartInProgress)
-                                        countdownButton(title: stopwatchPrimaryButtonTitle, size: max(22, dateSize * 1.6), action: toggleStopwatchRunState)
-                                        countdownButton(title: L10n.reset, size: max(22, dateSize * 1.6), action: resetStopwatch)
-                                    }
-                                    .padding(.leading, 10)
-                                }
-                            }
-                        } else if topMode == .countdown {
-                            HStack(alignment: .center, spacing: 16) {
-                                HStack(alignment: .lastTextBaseline, spacing: 8) {
-                                    Text(String(format: "%02d", countdownDisplayHours))
-                                        .font(displayFont(size: mainClockSize, weight: .bold))
-                                        .monospacedDigit()
-                                        .shadow(color: phosphorColor.opacity(0.8), radius: 8)
-                                        .contentShape(Rectangle())
-                                        #if os(macOS)
-                                        .overlay(
-                                            MouseClickCatcher(
-                                                onLeftClick: { incrementCountdownHour() },
-                                                onRightClick: { decrementCountdownHour() }
-                                            )
-                                        )
-                                        #else
-                                        .onTapGesture {
-                                            incrementCountdownHour()
-                                        }
-                                        #endif
-
-                                    Text(":")
-                                        .font(displayFont(size: mainClockSize, weight: .bold))
-                                        .monospacedDigit()
-                                        .shadow(color: phosphorColor.opacity(0.8), radius: 8)
-                                        .opacity(timeSeparatorOpacity)
-
-                                    Text(String(format: "%02d", countdownDisplayMinutes))
-                                        .font(displayFont(size: mainClockSize, weight: .bold))
-                                        .monospacedDigit()
-                                        .shadow(color: phosphorColor.opacity(0.8), radius: 8)
-                                        .contentShape(Rectangle())
-                                        #if os(macOS)
-                                        .overlay(
-                                            MouseClickCatcher(
-                                                onLeftClick: { incrementCountdownMinute() },
-                                                onRightClick: { decrementCountdownMinute() }
-                                            )
-                                        )
-                                        #else
-                                        .onTapGesture {
-                                            incrementCountdownMinute()
-                                        }
-                                        #endif
-
-                                    Text(String(format: "%02d", countdownDisplaySeconds))
-                                        .font(displayFont(size: secondsSize, weight: .bold))
-                                        .monospacedDigit()
-                                        .shadow(color: phosphorColor.opacity(0.7), radius: 6)
-                                        .contentShape(Rectangle())
-                                        #if os(macOS)
-                                        .overlay(
-                                            MouseClickCatcher(
-                                                onLeftClick: { incrementCountdownSecond() },
-                                                onRightClick: { decrementCountdownSecond() }
-                                            )
-                                        )
-                                        #else
-                                        .onTapGesture {
-                                            incrementCountdownSecond()
-                                        }
-                                        #endif
-                                }
-                                .foregroundStyle(phosphorColor)
-
-                                VStack(spacing: 14) {
-                                    countdownButton(title: countdownPrimaryButtonTitle, size: max(22, dateSize * 1.6), action: toggleCountdownRunState)
-                                    countdownButton(title: L10n.stop, size: max(22, dateSize * 1.6), action: stopCountdown)
-                                    countdownButton(title: L10n.reset, size: max(22, dateSize * 1.6), action: resetCountdown)
-                                }
-                                .padding(.leading, 10)
-                            }
-                        } else if topMode == .alarm {
-                            HStack(alignment: .center, spacing: 16) {
-                                HStack(alignment: .lastTextBaseline, spacing: 8) {
-                                    Text(String(format: "%02d", alarmSetHours))
-                                        .font(displayFont(size: mainClockSize, weight: .bold))
-                                        .monospacedDigit()
-                                        .shadow(color: alarmColor.opacity(0.75), radius: 8)
-                                        .contentShape(Rectangle())
-                                        #if os(macOS)
-                                        .overlay(
-                                            MouseClickCatcher(
-                                                onLeftClick: { incrementAlarmHour() },
-                                                onRightClick: { decrementAlarmHour() }
-                                            )
-                                        )
-                                        #else
-                                        .onTapGesture {
-                                            incrementAlarmHour()
-                                        }
-                                        #endif
-
-                                    Text(":")
-                                        .font(displayFont(size: mainClockSize, weight: .bold))
-                                        .monospacedDigit()
-                                        .shadow(color: alarmColor.opacity(0.75), radius: 8)
-                                        .opacity(timeSeparatorOpacity)
-
-                                    Text(String(format: "%02d", alarmSetMinutes))
-                                        .font(displayFont(size: mainClockSize, weight: .bold))
-                                        .monospacedDigit()
-                                        .shadow(color: alarmColor.opacity(0.75), radius: 8)
-                                        .contentShape(Rectangle())
-                                        #if os(macOS)
-                                        .overlay(
-                                            MouseClickCatcher(
-                                                onLeftClick: { incrementAlarmMinute() },
-                                                onRightClick: { decrementAlarmMinute() }
-                                            )
-                                        )
-                                        #else
-                                        .onTapGesture {
-                                            incrementAlarmMinute()
-                                        }
-                                        #endif
-
-                                }
-                                .foregroundStyle(alarmColor)
-
-                                HStack(spacing: 8) {
-                                    Button(action: { alarmEnabled.toggle() }) {
-                                        Text(alarmEnabled ? "ON" : "OFF")
-                                            .font(.system(size: max(16, dateSize * 1.2), weight: .semibold, design: .monospaced))
-                                            .foregroundStyle(alarmEnabled ? alarmColor : phosphorDim)
-                                            .contentShape(Rectangle())
-                                    }
-                                    .buttonStyle(.plain)
-                                    Toggle("", isOn: $alarmEnabled)
-                                        .labelsHidden()
-                                }
-                                .padding(.leading, 10)
-                            }
-                        } else {
-                            HStack(alignment: .lastTextBaseline, spacing: 10) {
-                                Text(displayedHourMinuteParts.hours)
-                                    .font(displayFont(size: mainClockSize, weight: .bold))
-                                    .monospacedDigit()
-                                    .shadow(color: phosphorColor.opacity(0.8), radius: 8)
-
-                                Text(":")
-                                    .font(displayFont(size: mainClockSize, weight: .bold))
-                                    .monospacedDigit()
-                                    .shadow(color: phosphorColor.opacity(0.8), radius: 8)
-                                    .opacity(timeSeparatorOpacity)
-
-                                Text(displayedHourMinuteParts.minutes)
-                                    .font(displayFont(size: mainClockSize, weight: .bold))
-                                    .monospacedDigit()
-                                    .shadow(color: phosphorColor.opacity(0.8), radius: 8)
-
-                                Text(displayedSecondsText)
-                                    .font(displayFont(size: secondsSize, weight: .bold))
-                                    .monospacedDigit()
-                                    .shadow(color: phosphorColor.opacity(0.7), radius: 6)
-
-                                if topMode == .worldClock {
-                                    Text(worldClockCityCode)
-                                        .font(displayFont(size: max(34, dateSize * 2.05), weight: .bold))
-                                        .monospacedDigit()
-                                        .shadow(color: phosphorColor.opacity(0.7), radius: 6)
-                                        .padding(.leading, 18)
-                                        .contentShape(Rectangle())
-                                        #if os(macOS)
-                                        .overlay(
-                                            MouseClickCatcher(
-                                                onLeftClick: { rotateWorldCityForward() },
-                                                onRightClick: { rotateWorldCityBackward() }
-                                            )
-                                        )
-                                        #else
-                                        .onTapGesture {
-                                            rotateWorldCityForward()
-                                        }
-                                        #endif
-                                }
-                            }
-                            .foregroundStyle(phosphorColor)
+                        if let topScreenClockMode = displayedTopMode(on: .top) {
+                            topModeContent(
+                                mode: topScreenClockMode,
+                                dateSize: dateSize,
+                                mainClockSize: mainClockSize,
+                                secondsSize: secondsSize,
+                                driveTitleSize: driveTitleSize
+                            )
+                            .minimumScaleFactor((topScreenClockMode == .calendar || topScreenClockMode == .weather || topScreenClockMode == .fullClock) ? 1 : 0.5)
+                            .lineLimit((topScreenClockMode == .calendar || topScreenClockMode == .weather || topScreenClockMode == .fullClock) ? nil : 1)
+                        } else if let topScreenUtilityMode = displayedUtilityMode(on: .top) {
+                            utilityModeContent(mode: topScreenUtilityMode, dateSize: dateSize, driveTitleSize: driveTitleSize, topHalfHeight: topHalfHeight)
                         }
 
-                        if topMode == .clock {
+                        if displayedTopMode(on: .top) == .clock {
                             Text(viewModel.dateText)
                                 .font(displayFont(size: dateSize, weight: .medium))
                                 .foregroundStyle(phosphorDim)
@@ -1123,8 +914,6 @@ struct ContentView: View {
                                 .offset(y: 10)
                         }
                     }
-                    .minimumScaleFactor((topMode == .calendar || topMode == .weather || topMode == .fullClock) ? 1 : 0.5)
-                    .lineLimit((topMode == .calendar || topMode == .weather || topMode == .fullClock) ? nil : 1)
                     .padding(.horizontal, 12)
                     .padding(.top, 12)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -1147,425 +936,8 @@ struct ContentView: View {
                             .padding(.trailing, 10)
                         }
                     }
-
-                    if splitFullscreenTarget == .none {
-                        Rectangle()
-                            .fill(phosphorColor.opacity(0.18))
-                            .frame(height: 1)
-                    }
-
-                    #if os(macOS)
-                    Group {
-                        if utilityMode == .audio {
-                            audioUtilityView(dateSize: dateSize, driveTitleSize: driveTitleSize)
-                        } else if utilityMode == .music, selectedMusicMode == nil {
-                            musicLauncherView
-                                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-                        } else if isMusicActive(.metronome) {
-                            HStack(alignment: .center, spacing: 18) {
-                                ZStack {
-                                    Circle()
-                                        .fill(Color(red: 0.06, green: 0.15, blue: 0.09))
-                                    Circle()
-                                        .fill(phosphorColor.opacity(metronomePulseActive ? 0.95 : 0.18))
-                                        .blur(radius: metronomePulseActive ? 2.0 : 0)
-                                        .animation(.easeOut(duration: 0.16), value: metronomePulseActive)
-                                    Circle()
-                                        .stroke(phosphorColor.opacity(0.65), lineWidth: 2)
-                                }
-                                .frame(width: topHalfHeight * 0.82, height: topHalfHeight * 0.82)
-                                .shadow(color: phosphorColor.opacity(metronomePulseActive ? 0.55 : 0.18), radius: 12)
-
-                                VStack(spacing: 14) {
-                                    HStack(alignment: .center, spacing: 6) {
-                                        Text("\(metronomeNumerator)")
-                                            .font(displayFont(size: max(24, dateSize * 1.45), weight: .regular))
-                                            .foregroundStyle(phosphorColor)
-                                            .monospacedDigit()
-                                            .contentShape(Rectangle())
-                                            .overlay(
-                                                MouseClickCatcher(
-                                                    onLeftClick: { rotateMetronomeNumeratorForward() },
-                                                    onRightClick: { rotateMetronomeNumeratorBackward() }
-                                                )
-                                            )
-
-                                        Text("/")
-                                            .font(displayFont(size: max(24, dateSize * 1.45), weight: .regular))
-                                            .foregroundStyle(phosphorDim)
-
-                                        Text("\(metronomeDenominator)")
-                                            .font(displayFont(size: max(24, dateSize * 1.45), weight: .regular))
-                                            .foregroundStyle(phosphorColor)
-                                            .monospacedDigit()
-                                            .contentShape(Rectangle())
-                                            .overlay(
-                                                MouseClickCatcher(
-                                                    onLeftClick: { rotateMetronomeDenominatorForward() },
-                                                    onRightClick: { rotateMetronomeDenominatorBackward() }
-                                                )
-                                            )
-                                    }
-                                    .frame(width: 190)
-                                    .padding(.vertical, 9)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                            .stroke(phosphorColor.opacity(0.5), lineWidth: 1)
-                                    )
-
-                                    Text("BPM")
-                                        .font(.system(size: max(15, dateSize * 1.15), weight: .medium, design: .monospaced))
-                                        .foregroundStyle(phosphorDim)
-
-                                    Text("\(metronomeBPM)")
-                                        .font(displayFont(size: max(32, driveTitleSize * 1.45), weight: .bold))
-                                        .foregroundStyle(phosphorColor)
-                                        .monospacedDigit()
-                                        .contentShape(Rectangle())
-                                        .overlay(
-                                            MouseClickCatcher(
-                                                onLeftClick: { incrementMetronomeBPM() },
-                                                onRightClick: { decrementMetronomeBPM() }
-                                            )
-                                        )
-
-                                    Button(action: {
-                                        if metronomeRunning {
-                                            stopMetronome()
-                                        } else {
-                                            startMetronome()
-                                        }
-                                    }) {
-                                        Text(metronomeRunning ? L10n.stop : L10n.start)
-                                            .font(displayFont(size: max(20, dateSize * 1.45), weight: .regular))
-                                            .foregroundStyle(phosphorColor)
-                                            .lineLimit(1)
-                                            .minimumScaleFactor(0.8)
-                                            .frame(width: 190)
-                                            .padding(.vertical, 10)
-                                            .overlay(
-                                                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                                    .stroke(phosphorColor.opacity(0.5), lineWidth: 1)
-                                            )
-                                    }
-                                    .buttonStyle(PressableCountdownButtonStyle(phosphorColor: phosphorColor))
-                                }
-                            }
-                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-                        } else if isMusicActive(.tuner) {
-                            VStack(spacing: 14) {
-                                if tunerEngine.permissionDenied {
-                                    VStack(spacing: 6) {
-                                        Text(L10n.tunerMicPermission)
-                                            .font(.system(size: max(14, dateSize), weight: .medium, design: .monospaced))
-                                            .foregroundStyle(Color.red)
-                                        Button(L10n.tunerRequestPermission) {
-                                            tunerEngine.requestMicrophonePermissionFromUI()
-                                        }
-                                        .buttonStyle(.plain)
-                                        .font(.system(size: max(14, dateSize * 0.95), weight: .regular, design: .monospaced))
-                                        .foregroundStyle(phosphorColor)
-                                        .underline()
-                                    }
-                                }
-
-                                Menu {
-                                    ForEach(tunerEngine.inputs) { input in
-                                        Button(input.name) {
-                                            tunerEngine.selectInput(input.id)
-                                        }
-                                    }
-                                } label: {
-                                    Text(tunerInputLabel)
-                                        .font(.system(size: max(15, dateSize * 1.15), weight: .medium, design: .monospaced))
-                                        .foregroundStyle(phosphorColor)
-                                        .lineLimit(1)
-                                        .underline()
-                                }
-                                .buttonStyle(.plain)
-                                .menuStyle(.borderlessButton)
-
-                                Menu {
-                                    if tunerEngine.inputSources.isEmpty {
-                                        Text(L10n.tunerNoSources)
-                                    } else {
-                                        ForEach(tunerEngine.inputSources) { source in
-                                            Button(source.name) {
-                                                tunerEngine.selectInputSource(source.id)
-                                            }
-                                        }
-                                    }
-                                } label: {
-                                    Text(tunerSourceLabel)
-                                        .font(.system(size: max(15, dateSize * 1.05), weight: .regular, design: .monospaced))
-                                        .foregroundStyle(phosphorDim)
-                                        .lineLimit(1)
-                                        .underline()
-                                }
-                                .menuStyle(.borderlessButton)
-                                .buttonStyle(.plain)
-
-                                Text(tunerEngine.noteName)
-                                    .font(displayFont(size: max(58, driveTitleSize * 2.4), weight: .bold))
-                                    .foregroundStyle(phosphorColor)
-                                    .shadow(color: phosphorColor.opacity(0.7), radius: 8)
-
-                                VStack(spacing: 6) {
-                                    ZStack(alignment: .leading) {
-                                        RoundedRectangle(cornerRadius: 5, style: .continuous)
-                                            .fill(Color(red: 0.08, green: 0.18, blue: 0.11))
-                                            .frame(width: max(240, topHalfHeight * 0.75), height: 12)
-
-                                        RoundedRectangle(cornerRadius: 5, style: .continuous)
-                                            .fill(tunerBarColor)
-                                            .frame(width: tunerBarWidth(total: max(240, topHalfHeight * 0.75)), height: 12)
-                                    }
-
-                                    Text(tunerStatusText)
-                                        .font(.system(size: max(15, dateSize * 1.05), weight: .regular, design: .monospaced))
-                                        .foregroundStyle(phosphorDim)
-                                        .monospacedDigit()
-                                }
-                            }
-                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-                        } else if isMusicActive(.chordDetect) {
-                            VStack(spacing: 12) {
-                                if tunerEngine.permissionDenied {
-                                    VStack(spacing: 6) {
-                                        Text(L10n.tunerMicPermission)
-                                            .font(.system(size: max(14, dateSize), weight: .medium, design: .monospaced))
-                                            .foregroundStyle(Color.red)
-                                        Button(L10n.tunerRequestPermission) {
-                                            tunerEngine.requestMicrophonePermissionFromUI()
-                                        }
-                                        .buttonStyle(.plain)
-                                        .font(.system(size: max(14, dateSize * 0.95), weight: .regular, design: .monospaced))
-                                        .foregroundStyle(phosphorColor)
-                                        .underline()
-                                    }
-                                }
-
-                                Menu {
-                                    ForEach(tunerEngine.inputs) { input in
-                                        Button(input.name) {
-                                            tunerEngine.selectInput(input.id)
-                                        }
-                                    }
-                                } label: {
-                                    Text(tunerInputLabel)
-                                        .font(.system(size: max(15, dateSize * 1.15), weight: .medium, design: .monospaced))
-                                        .foregroundStyle(phosphorColor)
-                                        .lineLimit(1)
-                                        .underline()
-                                }
-                                .buttonStyle(.plain)
-                                .menuStyle(.borderlessButton)
-
-                                Menu {
-                                    if tunerEngine.inputSources.isEmpty {
-                                        Text(L10n.tunerNoSources)
-                                    } else {
-                                        ForEach(tunerEngine.inputSources) { source in
-                                            Button(source.name) {
-                                                tunerEngine.selectInputSource(source.id)
-                                            }
-                                        }
-                                    }
-                                } label: {
-                                    Text(tunerSourceLabel)
-                                        .font(.system(size: max(15, dateSize * 1.05), weight: .regular, design: .monospaced))
-                                        .foregroundStyle(phosphorDim)
-                                        .lineLimit(1)
-                                        .underline()
-                                }
-                                .menuStyle(.borderlessButton)
-                                .buttonStyle(.plain)
-
-                                Text(tunerEngine.detectedChordName)
-                                    .font(displayFont(size: max(50, driveTitleSize * 2.2), weight: .bold))
-                                    .foregroundStyle(phosphorColor)
-                                    .shadow(color: phosphorColor.opacity(0.7), radius: 8)
-
-                                Text(chordDetectStatusText)
-                                    .font(.system(size: max(15, dateSize * 1.05), weight: .regular, design: .monospaced))
-                                    .foregroundStyle(phosphorDim)
-                                    .monospacedDigit()
-                            }
-                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-                        } else if isMusicActive(.chordFinder) {
-                            ZStack {
-                                if let voicing = activeChordVoicing {
-                                    chordDiagram(voicing: voicing)
-                                        .frame(width: min(300, topHalfHeight * 1.1), height: min(220, topHalfHeight * 0.78))
-                                        .contentShape(Rectangle())
-                                        #if os(macOS)
-                                        .overlay(
-                                            MouseClickCatcher(
-                                                onLeftClick: { rotateChordVoicingForward() },
-                                                onRightClick: { rotateChordVoicingBackward() }
-                                            )
-                                        )
-                                        #else
-                                        .onTapGesture {
-                                            rotateChordVoicingForward()
-                                        }
-                                        #endif
-                                } else {
-                                    Text(L10n.chordFinderNoMatch)
-                                        .font(displayFont(size: max(22, dateSize * 1.35), weight: .semibold))
-                                        .foregroundStyle(phosphorColor)
-                                }
-
-                                VStack(alignment: .leading, spacing: 10) {
-                                    TextField(L10n.chordFinderPlaceholder, text: $chordInput)
-                                        .font(.system(size: max(18, dateSize * 1.12), weight: .medium, design: .monospaced))
-                                        .foregroundStyle(phosphorColor)
-                                        .textFieldStyle(.plain)
-                                        .frame(width: 140, alignment: .leading)
-                                        .padding(.horizontal, 10)
-                                        .padding(.vertical, 8)
-                                        .background(Color.black.opacity(0.35))
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                                .stroke(phosphorColor.opacity(0.45), lineWidth: 1)
-                                        )
-                                        .onChange(of: chordInput) { _, _ in
-                                            refreshChordFinder()
-                                        }
-
-                                    Text(activeChordKeyText)
-                                        .font(displayFont(size: max(24, dateSize * 1.4), weight: .bold))
-                                        .foregroundStyle(phosphorDim)
-                                        .lineLimit(1)
-
-                                    if activeChordVoicing != nil {
-                                        Text(chordVoicingPositionText)
-                                            .font(.system(size: max(14, dateSize * 0.98), weight: .regular, design: .monospaced))
-                                            .foregroundStyle(phosphorDim)
-                                    }
-                                }
-                                .frame(width: min(280, topHalfHeight * 0.95), alignment: .leading)
-                                .padding(.leading, 18)
-                                .padding(.top, 34)
-                                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-                            }
-                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-                        } else if isMusicActive(.tapTempo) {
-                            HStack(alignment: .center, spacing: 28) {
-                                // Círculo a la izquierda
-                                ZStack {
-                                    Circle()
-                                        .fill(tapTempoPulseActive ? phosphorColor.opacity(0.22) : Color(red: 0.06, green: 0.15, blue: 0.09))
-                                    Circle()
-                                        .stroke(phosphorColor.opacity(0.65), lineWidth: 2)
-                                }
-                                .frame(width: topHalfHeight * 0.75, height: topHalfHeight * 0.75)
-                                .shadow(color: phosphorColor.opacity(tapTempoPulseActive ? 0.55 : 0.18), radius: 12)
-
-                                // Controles a la derecha
-                                VStack(spacing: 12) {
-                                    Text("BPM")
-                                        .font(.system(size: max(14, dateSize * 1.05), weight: .medium, design: .monospaced))
-                                        .foregroundStyle(phosphorDim)
-
-                                    Text(tapTempoBPM > 0 ? String(format: "%.1f", tapTempoBPM) : "---")
-                                        .font(displayFont(size: max(44, driveTitleSize * 1.55), weight: .bold))
-                                        .foregroundStyle(phosphorColor)
-                                        .monospacedDigit()
-                                        .frame(minWidth: 140, minHeight: 52)
-
-                                    Button(action: {
-                                        registerTapTempoTap()
-                                    }) {
-                                        Text(L10n.tapTempoTap)
-                                            .font(displayFont(size: max(20, dateSize * 1.45), weight: .regular))
-                                            .foregroundStyle(phosphorColor)
-                                            .lineLimit(1)
-                                            .minimumScaleFactor(0.8)
-                                            .frame(width: 190)
-                                            .padding(.vertical, 10)
-                                            .overlay(
-                                                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                                    .stroke(phosphorColor.opacity(0.5), lineWidth: 1)
-                                            )
-                                    }
-                                    .buttonStyle(PressableCountdownButtonStyle(phosphorColor: phosphorColor))
-                                    .keyboardShortcut(.space, modifiers: [])
-
-                                    Button(action: {
-                                        resetTapTempo()
-                                    }) {
-                                        Text(L10n.reset)
-                                            .font(.system(size: max(15, dateSize * 1.08), weight: .regular, design: .monospaced))
-                                            .foregroundStyle(phosphorDim)
-                                            .lineLimit(1)
-                                            .minimumScaleFactor(0.8)
-                                            .frame(width: 190)
-                                            .padding(.vertical, 8)
-                                            .overlay(
-                                                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                                    .stroke(phosphorDim.opacity(0.4), lineWidth: 1)
-                                            )
-                                    }
-                                    .buttonStyle(PressableCountdownButtonStyle(phosphorColor: phosphorColor))
-
-                                    // Espacio reservado para el contador de taps (siempre visible)
-                                    Text(tapTempoTaps.count > 0 ? "\(tapTempoTaps.count) \(tapTempoTaps.count == 1 ? L10n.tapTempoTapSingular : L10n.tapTempoTapPlural)" : " ")
-                                        .font(.system(size: max(13, dateSize * 0.92), weight: .regular, design: .monospaced))
-                                        .foregroundStyle(tapTempoTaps.count > 0 ? phosphorDim : Color.clear)
-                                        .frame(minHeight: 18)
-                                }
-                            }
-                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-                        } else if utilityMode == .games {
-                            gamesView
-                                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-                        } else if utilityMode == .info, selectedInfoMode == nil {
-                            infoLauncherView
-                                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-                        } else if isInfoActive(.todayInHistory) {
-                            todayInHistoryView
-                                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-                        } else if isInfoActive(.musicThought) {
-                            musicThoughtView
-                                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-                        } else if isInfoActive(.rae) {
-                            raeView
-                                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-                        } else if utilityMode == .teleprompter {
-                            teleprompterView
-                                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-                        } else if utilityMode == .cpu {
-                            cpuUtilityView(dateSize: dateSize, driveTitleSize: driveTitleSize)
-                        } else if utilityMode == .apps {
-                            appsUtilityView(dateSize: dateSize)
-                        } else if utilityMode == .network {
-                            networkUtilityView(dateSize: dateSize, driveTitleSize: driveTitleSize)
-                        } else if utilityMode == .storage {
-                            storageUtilityView(rowFontSize: driveTitleSize)
-                        } else if utilityMode == .photos {
-                            photosUtilityView(dateSize: dateSize)
-                        } else if utilityMode == .videos {
-                            videosUtilityView(dateSize: dateSize)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                    .frame(height: bottomSectionHeight)
-                    .clipped()
-                    .background(Color(red: 0.08, green: 0.18, blue: 0.11).opacity(0.30))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 0, style: .continuous)
-                            .stroke(phosphorColor.opacity(0.2), lineWidth: 1)
-                    )
-                    .overlay(alignment: .topTrailing) {
-                        if isTopFullscreen == false {
-                            splitFullscreenButton(target: .bottom)
-                                .padding(.top, 8)
-                                .padding(.trailing, 10)
-                        }
-                    }
                     .overlay(alignment: .topLeading) {
-                        if utilityMode == .music, selectedMusicMode != nil {
+                        if displayedUtilityMode(on: .top) == .music, selectedMusicMode != nil {
                             Button(action: {
                                 selectedMusicMode = nil
                                 syncMusicActivation()
@@ -1585,7 +957,7 @@ struct ContentView: View {
                             .padding(.top, 8)
                             .padding(.leading, 10)
                         }
-                        if utilityMode == .info, selectedInfoMode != nil {
+                        if displayedUtilityMode(on: .top) == .info, selectedInfoMode != nil {
                             Button(action: {
                                 selectedInfoMode = nil
                                 syncInfoActivation()
@@ -1607,13 +979,118 @@ struct ContentView: View {
                         }
                     }
                     .overlay {
-                        if utilityMode == .audio {
+                        if displayedUtilityMode(on: .top) == .audio {
                             MouseScrollCatcher { deltaY in
                                 adjustSystemVolumeFromScroll(deltaY: deltaY)
                             }
                         }
                     }
-                    #endif
+
+                    if splitFullscreenTarget == .none {
+                        Rectangle()
+                            .fill(phosphorColor.opacity(0.18))
+                            .frame(height: 1)
+                    }
+
+                    Group {
+                        if let bottomScreenClockMode = displayedTopMode(on: .bottom) {
+                            VStack(spacing: 0) {
+                                Color.clear
+                                    .frame(height: 48)
+
+                                VStack(spacing: 2) {
+                                    topModeContent(
+                                        mode: bottomScreenClockMode,
+                                        dateSize: dateSize,
+                                        mainClockSize: mainClockSize,
+                                        secondsSize: secondsSize,
+                                        driveTitleSize: driveTitleSize
+                                    )
+                                    .minimumScaleFactor((bottomScreenClockMode == .calendar || bottomScreenClockMode == .weather || bottomScreenClockMode == .fullClock) ? 1 : 0.5)
+                                    .lineLimit((bottomScreenClockMode == .calendar || bottomScreenClockMode == .weather || bottomScreenClockMode == .fullClock) ? nil : 1)
+
+                                    if bottomScreenClockMode == .clock {
+                                        Text(viewModel.dateText)
+                                            .font(displayFont(size: dateSize, weight: .medium))
+                                            .foregroundStyle(phosphorDim)
+                                            .shadow(color: phosphorColor.opacity(0.5), radius: 4)
+                                            .offset(y: 10)
+                                    }
+                                }
+                                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                            }
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                        } else if let bottomScreenUtilityMode = displayedUtilityMode(on: .bottom) {
+                            utilityModeContent(mode: bottomScreenUtilityMode, dateSize: dateSize, driveTitleSize: driveTitleSize, topHalfHeight: topHalfHeight)
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.top, displayedTopMode(on: .bottom) != nil ? 0 : 12)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .frame(maxHeight: .infinity, alignment: displayedTopMode(on: .bottom) != nil ? .center : .top)
+                    .frame(height: bottomSectionHeight)
+                    .clipped()
+                    .background(Color(red: 0.08, green: 0.18, blue: 0.11).opacity(0.30))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 0, style: .continuous)
+                            .stroke(phosphorColor.opacity(0.2), lineWidth: 1)
+                    )
+                    .overlay(alignment: .topTrailing) {
+                        if isTopFullscreen == false {
+                            splitFullscreenButton(target: .bottom)
+                                .padding(.top, 8)
+                                .padding(.trailing, 10)
+                        }
+                    }
+                    .overlay(alignment: .topLeading) {
+                        if displayedUtilityMode(on: .bottom) == .music, selectedMusicMode != nil {
+                            Button(action: {
+                                selectedMusicMode = nil
+                                syncMusicActivation()
+                            }) {
+                                Text("volver")
+                                    .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                                    .foregroundStyle(phosphorColor)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 6)
+                                    .background(Color.black.opacity(0.45))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                            .stroke(phosphorColor.opacity(0.45), lineWidth: 1)
+                                    )
+                            }
+                            .buttonStyle(.plain)
+                            .padding(.top, 8)
+                            .padding(.leading, 10)
+                        }
+                        if displayedUtilityMode(on: .bottom) == .info, selectedInfoMode != nil {
+                            Button(action: {
+                                selectedInfoMode = nil
+                                syncInfoActivation()
+                            }) {
+                                Text("volver")
+                                    .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                                    .foregroundStyle(phosphorColor)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 6)
+                                    .background(Color.black.opacity(0.45))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                            .stroke(phosphorColor.opacity(0.45), lineWidth: 1)
+                                    )
+                            }
+                            .buttonStyle(.plain)
+                            .padding(.top, 8)
+                            .padding(.leading, 10)
+                        }
+                    }
+                    .overlay {
+                        if displayedUtilityMode(on: .bottom) == .audio {
+                            MouseScrollCatcher { deltaY in
+                                adjustSystemVolumeFromScroll(deltaY: deltaY)
+                            }
+                        }
+                    }
                     }
                 }
 
@@ -1636,18 +1113,18 @@ struct ContentView: View {
                 }
             }
             .overlay(alignment: .topLeading) {
-                if countdownAlarmActive == false, isBottomFullscreen == false {
+                if countdownAlarmActive == false, isBottomFullscreen == false, shouldHideModeSelectorTag(on: .top) == false {
                     modeSelectorTag(
-                        topModeLabel,
+                        modeLabel(for: .top),
                         topPadding: 8,
                         onLeftClick: {
-                            rotateTopMode(forward: true)
+                            rotateScreenMode(on: .top, forward: true)
                             #if os(macOS)
                             triggerFlash()
                             #endif
                         },
                         onRightClick: {
-                            rotateTopMode(forward: false)
+                            rotateScreenMode(on: .top, forward: false)
                             #if os(macOS)
                             triggerFlash()
                             #endif
@@ -1657,24 +1134,18 @@ struct ContentView: View {
             }
             .overlay(alignment: .topLeading) {
                 if countdownAlarmActive == false, isTopFullscreen == false {
-                    let hideUtilityTagInAggregatedSubmode =
-                        (utilityMode == .music && selectedMusicMode != nil) ||
-                        (utilityMode == .games && selectedGameMode != nil) ||
-                        (utilityMode == .info && selectedInfoMode != nil) ||
-                        (utilityMode == .photos && photosIsRunning && splitFullscreenTarget == .bottom) ||
-                        (utilityMode == .videos && videosIsRunning && splitFullscreenTarget == .bottom)
-                    if hideUtilityTagInAggregatedSubmode == false {
+                    if shouldHideModeSelectorTag(on: .bottom) == false {
                     modeSelectorTag(
-                        utilityModeLabel,
+                        modeLabel(for: .bottom),
                         topPadding: topSectionHeight + 8,
                         onLeftClick: {
-                            rotateUtilityMode(forward: true)
+                            rotateScreenMode(on: .bottom, forward: true)
                             #if os(macOS)
                             triggerFlash()
                             #endif
                         },
                         onRightClick: {
-                            rotateUtilityMode(forward: false)
+                            rotateScreenMode(on: .bottom, forward: false)
                             #if os(macOS)
                             triggerFlash()
                             #endif
@@ -1725,21 +1196,9 @@ struct ContentView: View {
             startHousekeepingTimer()
             refreshAvailableDisplays()
             applySavedStartupDisplaySelectionIfNeeded()
-            syncMusicActivation()
-            syncGameActivation()
-            syncInfoActivation()
-            if topMode == .weather || topMode == .fullClock {
-                refreshWeatherDataIfNeeded(force: true)
-            }
             loadPhotoModeSettings(loadSources: false)
             loadVideoModeSettings(loadSources: false)
-            if utilityMode == .network {
-                refreshNetworkModeData(forcePublicIPRefresh: true)
-            } else if utilityMode == .photos {
-                hydratePhotosSourcesIfNeeded()
-            } else if utilityMode == .videos {
-                hydrateVideosSourcesIfNeeded()
-            }
+            syncVisibleModeState(forceWeatherRefresh: true, forceNetworkRefresh: true)
         }
         .onChange(of: usbMonitor.volumes.map(\.id)) { _, ids in
             let newIDs = Set(ids)
@@ -1748,8 +1207,9 @@ struct ContentView: View {
                 triggerFlash()
             }
             if addedIDs.isEmpty == false {
-                if enabledUtilityModes.contains(.storage) {
-                    utilityMode = .storage
+                if enabledUtilityModes.contains(.storage),
+                   let screen = screenShowingUtilityMode(.storage) {
+                    activateScreenMode(.utility(.storage), on: screen)
                 }
             }
             knownVolumeIDs = newIDs
@@ -1758,38 +1218,11 @@ struct ContentView: View {
             tickCountdown()
             tickScheduledAlarm(now: viewModel.now)
         }
-        .onChange(of: topMode) { _, newMode in
-            if newMode == .weather || newMode == .fullClock {
-                refreshWeatherDataIfNeeded(force: true)
-            }
+        .onChange(of: topScreenSelectedMode) { _, _ in
+            syncVisibleModeState(forceWeatherRefresh: true, forceNetworkRefresh: true)
         }
-        .onChange(of: utilityMode) { _, newMode in
-            if newMode != .music {
-                selectedMusicMode = nil
-            }
-            syncMusicActivation()
-
-            if newMode != .games {
-                selectedGameMode = nil
-            }
-            syncGameActivation()
-            if newMode != .info {
-                selectedInfoMode = nil
-            }
-            syncInfoActivation()
-            if newMode != .photos {
-                stopPhotosSlideshow()
-            } else {
-                hydratePhotosSourcesIfNeeded()
-            }
-            if newMode != .videos {
-                stopVideosPlayback()
-            } else {
-                hydrateVideosSourcesIfNeeded()
-            }
-            if newMode == .network {
-                refreshNetworkModeData(forcePublicIPRefresh: true)
-            }
+        .onChange(of: bottomScreenSelectedMode) { _, _ in
+            syncVisibleModeState(forceWeatherRefresh: true, forceNetworkRefresh: true)
         }
         .simultaneousGesture(
             TapGesture().onEnded {
@@ -1889,73 +1322,6 @@ struct ContentView: View {
 
     var tunerBelowColor: Color {
         Color(red: 1.0, green: 0.88, blue: 0.2)
-    }
-
-    var displayedHourMinuteText: String {
-        switch topMode {
-        case .clock:
-            return viewModel.hourMinuteText
-        case .worldClock:
-            return worldClockHourMinuteText
-        case .calendar:
-            return viewModel.hourMinuteText
-        case .weather:
-            return viewModel.hourMinuteText
-        case .fullClock:
-            return viewModel.hourMinuteText
-        case .uptime:
-            return uptimeText.hourMinute
-        case .stopwatch:
-            return stopwatchText.hourMinute
-        case .countdown:
-            return countdownText.hourMinute
-        case .alarm:
-            return String(format: "%02d:%02d", alarmSetHours, alarmSetMinutes)
-        }
-    }
-
-    var displayedHourMinuteParts: (hours: String, minutes: String) {
-        let text = displayedHourMinuteText
-        guard let separator = text.firstIndex(of: ":") else {
-            return (text, "00")
-        }
-        let hours = String(text[..<separator])
-        let minutesStart = text.index(after: separator)
-        let minutes = String(text[minutesStart...])
-        return (hours, minutes)
-    }
-
-    var shouldBlinkTimeSeparator: Bool {
-        switch topMode {
-        case .clock, .worldClock, .uptime:
-            return true
-        case .calendar:
-            return false
-        case .weather:
-            return false
-        case .fullClock:
-            return false
-        case .stopwatch:
-            return stopwatchRunning
-        case .countdown:
-            return countdownRunning
-        case .alarm:
-            return false
-        }
-    }
-
-    var timeSeparatorOpacity: Double {
-        guard shouldBlinkTimeSeparator else { return 1.0 }
-        let second = Calendar.current.component(.second, from: viewModel.now)
-        return second.isMultiple(of: 2) ? 1.0 : 0.18
-    }
-
-    var topModeLabel: String {
-        topModeLabel(for: topMode)
-    }
-
-    var utilityModeLabel: String {
-        utilityModeLabel(for: utilityMode)
     }
 
     func topModeLabel(for mode: TopClockMode) -> String {
@@ -2671,7 +2037,7 @@ struct ContentView: View {
 
     #if os(macOS)
     func triggerFlash(reason: FlashReason = .general) {
-        if utilityMode == .games, selectedGameMode == .spaceInvaders, reason != .spaceInvadersPlayerHit {
+        if isGameActive(.spaceInvaders), reason != .spaceInvadersPlayerHit {
             return
         }
         withAnimation(.easeOut(duration: 0.08)) {

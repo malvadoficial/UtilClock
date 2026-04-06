@@ -1,6 +1,6 @@
 # UtilClock
 
-UtilClock es una app para macOS con estética retro monocroma que combina reloj y utilidades en dos subpantallas.
+UtilClock es una app para macOS con estética retro monocroma que combina reloj y utilidades en dos subpantallas configurables.
 
 Esta aplicación se ha desarrollado utilizando **Codex de OpenAI** y está pensada para usarse en pantallas pequeñas, como la **Hagibis**.
 
@@ -38,14 +38,17 @@ Esta aplicación se ha desarrollado utilizando **Codex de OpenAI** y está pensa
   - Recordar pantalla de inicio y opción para olvidar selección guardada
   - Elegir presentación de la app: `Dock` o `Barra de menús`
 
-## Novedades recientes (v1.2.10)
+## Novedades recientes (v1.2.12)
 
-- Correcciones de ventana y fullscreen en macOS:
-  - Recuperación automática al volver del reposo cuando la app seguía viva pero la ventana desaparecía.
-  - Restauración al reabrir la app y recolocación si la ventana queda fuera de pantalla tras cambios de monitor.
-  - Pantalla completa más limpia, ocultando barra de menús y Dock.
-- `Ver Videos`:
-  - Nueva opción `Mostrar reloj` durante la reproducción, igual que en `Ver Fotos`.
+- Enrutado flexible de pantallas:
+  - Los modos de reloj y utilidades ahora se pueden asignar a la pantalla superior o inferior.
+  - La configuración recuerda qué modo y qué familia está visible en cada subpantalla.
+  - La rotación de modos y los launchers (`Música`, `Info`, `Juegos`) respetan la pantalla en la que están activos.
+- Ajustes y comportamiento:
+  - Nueva configuración para mover modos entre pantallas desde `Configuración`.
+  - Mejor sincronización de estados visibles para `Tiempo`, `Red`, `Ver Fotos` y `Ver Videos`.
+- macOS:
+  - Recuperación adicional de ventana al reactivar la app desde el Dock o al volver a primer plano.
 
 ## Capturas
 

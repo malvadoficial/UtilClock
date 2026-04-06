@@ -547,16 +547,16 @@ extension ContentView {
         let timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { _ in
             Task { @MainActor in
                 refreshSystemAudioState(triggerOnMuteTransition: true)
-                if utilityMode == .audio {
+                if isUtilityModeVisible(.audio) {
                     refreshAudioDeviceName()
-                } else if utilityMode == .network {
+                } else if isUtilityModeVisible(.network) {
                     refreshNetworkModeData(forcePublicIPRefresh: false)
-                } else if utilityMode == .cpu {
+                } else if isUtilityModeVisible(.cpu) {
                     refreshCPUUsage()
-                } else if utilityMode == .apps {
+                } else if isUtilityModeVisible(.apps) {
                     refreshAppsMonitorData()
                 }
-                if topMode == .weather {
+                if isTopModeVisible(.weather) || isTopModeVisible(.fullClock) {
                     refreshWeatherDataIfNeeded(force: false)
                 }
             }
@@ -581,8 +581,9 @@ extension ContentView {
            previous == false,
            isMuted == true,
            triggerOnMuteTransition {
-            if enabledUtilityModes.contains(.audio) {
-                utilityMode = .audio
+            if enabledUtilityModes.contains(.audio),
+               let screen = screenShowingUtilityMode(.audio) {
+                activateScreenMode(.utility(.audio), on: screen)
                 triggerFlash()
             }
         }

@@ -42,30 +42,6 @@ extension ContentView {
         hostWindow ?? NSApp.keyWindow ?? NSApp.mainWindow ?? NSApp.windows.first
     }
 
-
-    var displayedSecondsText: String {
-        switch topMode {
-        case .clock:
-            return viewModel.secondsText
-        case .worldClock:
-            return worldClockSecondsText
-        case .calendar:
-            return viewModel.secondsText
-        case .weather:
-            return viewModel.secondsText
-        case .fullClock:
-            return viewModel.secondsText
-        case .uptime:
-            return uptimeText.seconds
-        case .stopwatch:
-            return stopwatchText.seconds
-        case .countdown:
-            return countdownText.seconds
-        case .alarm:
-            return "00"
-        }
-    }
-
     func weatherSymbolName(code: Int, windKmh: Double?) -> String {
         if let windKmh, windKmh >= 36 {
             return "wind"
@@ -711,7 +687,7 @@ extension ContentView {
     }
 
     func tickCountdown() {
-        guard topMode == .countdown, countdownRunning else { return }
+        guard isTopModeVisible(.countdown), countdownRunning else { return }
         if countdownRemainingSeconds > 0 {
             countdownRemainingSeconds -= 1
         }
@@ -1090,8 +1066,12 @@ extension ContentView {
         deactivateMusicThoughtMode()
         stopCountdownAlarmIfNeeded()
         countdownAlarmActive = true
-        preAlarmTopMode = topMode
-        preAlarmUtilityMode = utilityMode
+        preAlarmTopScreenSelectedMode = topScreenSelectedMode
+        preAlarmBottomScreenSelectedMode = bottomScreenSelectedMode
+        preAlarmTopScreenTopMode = topScreenTopMode
+        preAlarmBottomScreenTopMode = bottomScreenTopMode
+        preAlarmTopScreenUtilityMode = topScreenUtilityMode
+        preAlarmBottomScreenUtilityMode = bottomScreenUtilityMode
         preAlarmMusicMode = selectedMusicMode
         preAlarmGameMode = selectedGameMode
         preAlarmInfoMode = selectedInfoMode
@@ -1131,23 +1111,36 @@ extension ContentView {
 
         if restorePreviousModes {
             alarmEnabled = false
-            if let previousTopMode = preAlarmTopMode {
-                topMode = previousTopMode
+            if let previousTopScreenSelectedMode = preAlarmTopScreenSelectedMode {
+                topScreenSelectedMode = previousTopScreenSelectedMode
             }
-            if let previousUtilityMode = preAlarmUtilityMode {
-                if utilityMode != previousUtilityMode {
-                    utilityMode = previousUtilityMode
-                }
-                selectedMusicMode = previousUtilityMode == .music ? preAlarmMusicMode : nil
-                selectedGameMode = previousUtilityMode == .games ? preAlarmGameMode : nil
-                selectedInfoMode = previousUtilityMode == .info ? preAlarmInfoMode : nil
-                syncMusicActivation()
-                syncGameActivation()
-                syncInfoActivation()
+            if let previousBottomScreenSelectedMode = preAlarmBottomScreenSelectedMode {
+                bottomScreenSelectedMode = previousBottomScreenSelectedMode
             }
+            if let previousTopScreenTopMode = preAlarmTopScreenTopMode {
+                topScreenTopMode = previousTopScreenTopMode
+            }
+            if let previousBottomScreenTopMode = preAlarmBottomScreenTopMode {
+                bottomScreenTopMode = previousBottomScreenTopMode
+            }
+            if let previousTopScreenUtilityMode = preAlarmTopScreenUtilityMode {
+                topScreenUtilityMode = previousTopScreenUtilityMode
+            }
+            if let previousBottomScreenUtilityMode = preAlarmBottomScreenUtilityMode {
+                bottomScreenUtilityMode = previousBottomScreenUtilityMode
+            }
+
+            selectedMusicMode = isUtilityModeVisible(.music) ? preAlarmMusicMode : nil
+            selectedGameMode = isUtilityModeVisible(.games) ? preAlarmGameMode : nil
+            selectedInfoMode = isUtilityModeVisible(.info) ? preAlarmInfoMode : nil
+            syncVisibleModeState(forceWeatherRefresh: true, forceNetworkRefresh: true)
         }
-        preAlarmTopMode = nil
-        preAlarmUtilityMode = nil
+        preAlarmTopScreenSelectedMode = nil
+        preAlarmBottomScreenSelectedMode = nil
+        preAlarmTopScreenTopMode = nil
+        preAlarmBottomScreenTopMode = nil
+        preAlarmTopScreenUtilityMode = nil
+        preAlarmBottomScreenUtilityMode = nil
         preAlarmMusicMode = nil
         preAlarmGameMode = nil
         preAlarmInfoMode = nil
@@ -1300,7 +1293,7 @@ extension ContentView {
                         .font(displayFont(size: max(44, mainClockSize * 0.63), weight: .bold))
                         .monospacedDigit()
                         .shadow(color: phosphorColor.opacity(0.8), radius: 6)
-                        .opacity(timeSeparatorOpacity)
+                        .opacity(timeSeparatorOpacity(for: .fullClock))
                     
                     Text(minutePart)
                         .font(displayFont(size: max(44, mainClockSize * 0.63), weight: .bold))

@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.2.12 - 2026-04-06
+
+- Dual-screen mode routing:
+  - Top clock modes and utility modes can now be assigned to either the top or bottom panel.
+  - Added persisted per-screen mode selection/order, including cross-screen moves from Settings.
+  - Mode rotation, launcher visibility and active-state checks now follow the screen currently showing each mode.
+- State synchronization improvements:
+  - Centralized visible-mode refresh logic for weather, network, photos, videos, music, games and info submodes.
+  - Improved storage auto-focus when USB volumes appear so it activates on the screen currently hosting `Storage`.
+- macOS window recovery:
+  - Added recovery when the app becomes active again and a stronger path to recreate/show the main window before retrying visibility fixes.
+
 ## v1.2.11 - 2026-03-24
 
 - Window recovery after sleep/display changes on macOS:

@@ -71,7 +71,7 @@ extension ContentView {
     }
 
     func isInfoActive(_ mode: InfoMode) -> Bool {
-        utilityMode == .info && selectedInfoMode == mode
+        isUtilityModeVisible(.info) && selectedInfoMode == mode
     }
 
     func syncInfoActivation() {
@@ -166,7 +166,7 @@ extension ContentView {
     }
 
     func isMusicActive(_ mode: MusicMode) -> Bool {
-        utilityMode == .music && selectedMusicMode == mode
+        isUtilityModeVisible(.music) && selectedMusicMode == mode
     }
 
     func syncMusicActivation() {

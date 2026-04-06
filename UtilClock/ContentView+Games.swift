@@ -276,7 +276,7 @@ extension ContentView {
     }
 
     func isGameActive(_ mode: GameMode) -> Bool {
-        utilityMode == .games && selectedGameMode == mode
+        isUtilityModeVisible(.games) && selectedGameMode == mode
     }
 
     func syncGameActivation() {
@@ -2231,6 +2231,9 @@ extension ContentView {
                     let maxY = ys.max() ?? 0
                     let shapeWidth = CGFloat((maxX - minX) + 1) * previewCellSize
                     let shapeHeight = CGFloat((maxY - minY) + 1) * previewCellSize
+                    let previewCornerRadius = max(1.8, previewCellSize * 0.17)
+                    let previewStrokeWidth = max(1, previewCellSize * 0.08)
+                    let previewCellFrame = previewCellSize - 1
 
                     VStack(spacing: 4) {
                         Text("NEXT")
@@ -2246,13 +2249,13 @@ extension ContentView {
                                 )
 
                             ForEach(Array(previewCells.enumerated()), id: \.offset) { _, cell in
-                                RoundedRectangle(cornerRadius: max(1.8, previewCellSize * 0.17), style: .continuous)
+                                RoundedRectangle(cornerRadius: previewCornerRadius, style: .continuous)
                                     .fill(phosphorColor.opacity(0.92))
                                     .overlay(
-                                        RoundedRectangle(cornerRadius: max(1.8, previewCellSize * 0.17), style: .continuous)
-                                            .stroke(Color.white.opacity(0.7), lineWidth: max(1, previewCellSize * 0.08))
+                                        RoundedRectangle(cornerRadius: previewCornerRadius, style: .continuous)
+                                            .stroke(Color.white.opacity(0.7), lineWidth: previewStrokeWidth)
                                     )
-                                    .frame(width: previewCellSize - 1, height: previewCellSize - 1)
+                                    .frame(width: previewCellFrame, height: previewCellFrame)
                                     .position(
                                         x: (previewBoxSize - shapeWidth) * 0.5 + CGFloat(cell.x - minX) * previewCellSize + (previewCellSize * 0.5),
                                         y: (previewBoxSize - shapeHeight) * 0.5 + CGFloat(cell.y - minY) * previewCellSize + (previewCellSize * 0.5)
