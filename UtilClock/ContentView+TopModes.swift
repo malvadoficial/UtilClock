@@ -12,29 +12,46 @@ struct WeatherDayForecast: Identifiable {
     let weatherCode: Int
 }
 
-private struct IPAPILocationResponse: Decodable {
-    let city: String?
-    let country_name: String?
-    let latitude: Double?
-    let longitude: Double?
+private struct MetNoForecastResponse: Decodable {
+    struct Properties: Decodable {
+        struct TimeSeries: Decodable {
+            struct DataBlock: Decodable {
+                struct InstantBlock: Decodable {
+                    struct Details: Decodable {
+                        let air_temperature: Double?
+                        let wind_speed: Double?
+                    }
+
+                    let details: Details
+                }
+
+                struct SummaryBlock: Decodable {
+                    struct Summary: Decodable {
+                        let symbol_code: String?
+                    }
+
+                    let summary: Summary
+                }
+
+                let instant: InstantBlock
+                let next_1_hours: SummaryBlock?
+                let next_6_hours: SummaryBlock?
+            }
+
+            let time: String
+            let data: DataBlock
+        }
+
+        let timeseries: [TimeSeries]
+    }
+
+    let properties: Properties
 }
 
-private struct OpenMeteoForecastResponse: Decodable {
-    struct Current: Decodable {
-        let temperature_2m: Double?
-        let weather_code: Int?
-        let wind_speed_10m: Double?
-    }
-
-    struct Daily: Decodable {
-        let time: [String]?
-        let weather_code: [Int]?
-        let temperature_2m_max: [Double]?
-        let temperature_2m_min: [Double]?
-    }
-
-    let current: Current?
-    let daily: Daily?
+struct WeatherResolvedLocation {
+    let latitude: Double
+    let longitude: Double
+    let locationName: String
 }
 
 extension ContentView {
@@ -185,133 +202,134 @@ extension ContentView {
 
     func refreshWeatherDataIfNeeded(force: Bool) {
         if weatherLoading { return }
+        if force == false, let retryNotBefore = weatherRetryNotBefore, Date() < retryNotBefore {
+            return
+        }
         if force == false, let last = weatherLastRefresh, Date().timeIntervalSince(last) < 900 {
             return
         }
 
-        if let lat = weatherLatitude, let lon = weatherLongitude {
-            fetchOpenMeteoWeather(latitude: lat, longitude: lon)
-        } else {
-            fetchWeatherLocationAndThenForecast()
+        if let manualLat = weatherManualLatitude,
+           let manualLon = weatherManualLongitude,
+           let manualName = weatherManualLocationName,
+           manualName.isEmpty == false {
+            weatherLocationName = manualName
+            fetchMetNoWeather(latitude: manualLat, longitude: manualLon)
+            return
         }
+        weatherLocationName = ""
+        weatherCurrentTemperatureC = nil
+        weatherCurrentWindKmh = nil
+        weatherTodayMinC = nil
+        weatherTodayMaxC = nil
+        weatherForecastDays = []
+        weatherLoading = false
+        weatherErrorText = nil
     }
 
-    func fetchWeatherLocationAndThenForecast() {
+    func fetchMetNoWeather(latitude: Double, longitude: Double) {
         weatherLoading = true
-        weatherErrorText = nil
-        guard let url = URL(string: "https://ipapi.co/json/") else {
+        if weatherCurrentTemperatureC != nil || weatherForecastDays.isEmpty == false {
+            weatherErrorText = nil
+        }
+        guard let url = URL(string: "https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=\(latitude)&lon=\(longitude)") else {
             weatherLoading = false
+            weatherRetryNotBefore = Date().addingTimeInterval(15)
             weatherErrorText = L10n.weatherError
             return
         }
 
-        Task {
-            do {
-                let (data, response) = try await URLSession.shared.data(from: url)
-                guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
-                    await MainActor.run {
-                        weatherLoading = false
-                        weatherErrorText = L10n.weatherError
-                    }
-                    return
-                }
-                let decoded = try JSONDecoder().decode(IPAPILocationResponse.self, from: data)
-                guard let lat = decoded.latitude, let lon = decoded.longitude else {
-                    await MainActor.run {
-                        weatherLoading = false
-                        weatherErrorText = L10n.weatherError
-                    }
-                    return
-                }
-
-                let locationName = [decoded.city, decoded.country_name]
-                    .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
-                    .filter { $0.isEmpty == false }
-                    .joined(separator: ", ")
-
-                await MainActor.run {
-                    weatherLatitude = lat
-                    weatherLongitude = lon
-                    weatherLocationName = locationName.isEmpty ? "-" : locationName
-                }
-                fetchOpenMeteoWeather(latitude: lat, longitude: lon)
-            } catch {
-                await MainActor.run {
-                    weatherLoading = false
-                    weatherErrorText = L10n.weatherError
-                }
-            }
-        }
-    }
-
-    func fetchOpenMeteoWeather(latitude: Double, longitude: Double) {
-        weatherLoading = true
-        weatherErrorText = nil
-        let query = "https://api.open-meteo.com/v1/forecast?latitude=\(latitude)&longitude=\(longitude)&current=temperature_2m,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=6"
-        guard let url = URL(string: query) else {
-            weatherLoading = false
-            weatherErrorText = L10n.weatherError
-            return
-        }
+        var request = URLRequest(url: url)
+        request.setValue("UtilClock/1.0 (com.malvadoficial.UtilClock)", forHTTPHeaderField: "User-Agent")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
 
         Task {
             do {
-                let (data, response) = try await URLSession.shared.data(from: url)
+                let (data, response) = try await URLSession.shared.data(for: request)
                 guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
                     await MainActor.run {
                         weatherLoading = false
+                        weatherRetryNotBefore = Date().addingTimeInterval(60)
                         weatherErrorText = L10n.weatherError
                     }
                     return
                 }
 
-                let decoded = try JSONDecoder().decode(OpenMeteoForecastResponse.self, from: data)
-                let currentTemp = decoded.current?.temperature_2m
-                let currentCode = decoded.current?.weather_code ?? 0
-                let currentWind = decoded.current?.wind_speed_10m
-
-                let times = decoded.daily?.time ?? []
-                let codes = decoded.daily?.weather_code ?? []
-                let maxs = decoded.daily?.temperature_2m_max ?? []
-                let mins = decoded.daily?.temperature_2m_min ?? []
-                let count = min(times.count, codes.count, maxs.count, mins.count)
                 let formatter = ISO8601DateFormatter()
-                formatter.formatOptions = [.withFullDate]
+                let calendar = Calendar(identifier: .gregorian)
+                let decoded = try JSONDecoder().decode(MetNoForecastResponse.self, from: data)
 
-                var forecasts: [WeatherDayForecast] = []
-                forecasts.reserveCapacity(count)
-                if count > 0 {
-                    for i in 0..<count {
-                        let date = formatter.date(from: times[i]) ?? Date()
-                        forecasts.append(
-                            WeatherDayForecast(
-                                date: date,
-                                minC: mins[i],
-                                maxC: maxs[i],
-                                weatherCode: codes[i]
-                            )
-                        )
+                let series = decoded.properties.timeseries.compactMap { entry -> (date: Date, temp: Double, wind: Double?, symbolCode: String?)? in
+                    guard let date = formatter.date(from: entry.time),
+                          let temp = entry.data.instant.details.air_temperature else {
+                        return nil
                     }
+                    return (
+                        date: date,
+                        temp: temp,
+                        wind: entry.data.instant.details.wind_speed,
+                        symbolCode: entry.data.next_1_hours?.summary.symbol_code ?? entry.data.next_6_hours?.summary.symbol_code
+                    )
+                }
+
+                guard let current = series.first else {
+                    await MainActor.run {
+                        weatherLoading = false
+                        weatherRetryNotBefore = Date().addingTimeInterval(60)
+                        weatherErrorText = L10n.weatherError
+                    }
+                    return
+                }
+
+                let grouped = Dictionary(grouping: series) { calendar.startOfDay(for: $0.date) }
+                let forecasts: [WeatherDayForecast] = grouped.keys.sorted().prefix(6).compactMap { day in
+                    guard let entries = grouped[day], entries.isEmpty == false else { return nil }
+                    let minC = entries.map(\.temp).min() ?? current.temp
+                    let maxC = entries.map(\.temp).max() ?? current.temp
+                    let targetMidday = day.addingTimeInterval(12 * 3600)
+                    let representative = entries.min {
+                        abs($0.date.timeIntervalSince(targetMidday)) < abs($1.date.timeIntervalSince(targetMidday))
+                    }
+                    return WeatherDayForecast(
+                        date: day,
+                        minC: minC,
+                        maxC: maxC,
+                        weatherCode: weatherCode(forMetNoSymbolCode: representative?.symbolCode)
+                    )
                 }
 
                 await MainActor.run {
-                    weatherCurrentTemperatureC = currentTemp
-                    weatherCurrentWeatherCode = currentCode
-                    weatherCurrentWindKmh = currentWind
+                    weatherCurrentTemperatureC = current.temp
+                    weatherCurrentWeatherCode = weatherCode(forMetNoSymbolCode: current.symbolCode)
+                    weatherCurrentWindKmh = current.wind.map { $0 * 3.6 }
                     weatherForecastDays = forecasts
                     weatherTodayMinC = forecasts.first?.minC
                     weatherTodayMaxC = forecasts.first?.maxC
                     weatherLastRefresh = Date()
+                    weatherRetryNotBefore = nil
                     weatherLoading = false
                     weatherErrorText = nil
                 }
             } catch {
                 await MainActor.run {
                     weatherLoading = false
+                    weatherRetryNotBefore = Date().addingTimeInterval(60)
                     weatherErrorText = L10n.weatherError
                 }
             }
         }
+    }
+
+    func weatherCode(forMetNoSymbolCode symbolCode: String?) -> Int {
+        guard let symbolCode else { return 1 }
+        let normalized = symbolCode.lowercased()
+        if normalized.contains("thunder") { return 95 }
+        if normalized.contains("sleet") || normalized.contains("snow") { return 71 }
+        if normalized.contains("rain") || normalized.contains("drizzle") { return 61 }
+        if normalized.contains("fog") { return 45 }
+        if normalized.contains("cloud") { return 3 }
+        if normalized.contains("fair") || normalized.contains("clear") || normalized.contains("sun") { return 0 }
+        return 1
     }
 
     var calendarDisplayedMonthDate: Date {
@@ -1322,7 +1340,7 @@ extension ContentView {
                 fullClockMiniCalendar(dateSize: dateSize)
                 
                 // Info del clima
-                if weatherCurrentTemperatureC != nil || weatherLocationName.isEmpty == false {
+                if weatherCurrentTemperatureC != nil || weatherLocationName.isEmpty == false || weatherLoading || weatherErrorText != nil {
                     fullClockWeatherInfo(dateSize: dateSize, driveTitleSize: driveTitleSize)
                 }
             }
@@ -1437,6 +1455,18 @@ extension ContentView {
                     .font(.system(size: max(11, dateSize * 0.78), weight: .regular, design: .monospaced))
             }
             .foregroundStyle(phosphorDim)
+
+            if weatherLoading && weatherCurrentTemperatureC == nil {
+                Text(L10n.weatherLoading)
+                    .font(.system(size: max(10, dateSize * 0.72), weight: .regular, design: .monospaced))
+                    .foregroundStyle(phosphorDim)
+            } else if let weatherErrorText, weatherErrorText.isEmpty == false {
+                Text(weatherErrorText)
+                    .font(.system(size: max(10, dateSize * 0.72), weight: .regular, design: .monospaced))
+                    .foregroundStyle(Color.red.opacity(0.85))
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .padding(9)
         .background(Color.black.opacity(0.3))

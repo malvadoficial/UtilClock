@@ -515,9 +515,14 @@ struct ContentView: View {
     @State var weatherForecastDays: [WeatherDayForecast] = []
     @State var weatherLatitude: Double?
     @State var weatherLongitude: Double?
+    @State var weatherManualLocationName: String?
+    @State var weatherManualLatitude: Double?
+    @State var weatherManualLongitude: Double?
     @State var weatherLastRefresh: Date?
+    @State var weatherRetryNotBefore: Date?
     @State var weatherLoading = false
     @State var weatherErrorText: String?
+    @StateObject var weatherLocationSearch = WeatherLocationSearchModel()
     @State var splitFullscreenTarget: SplitFullscreenTarget = .none
     @State var preferredFullscreen = true
     @State var menuBarOnlyMode = false

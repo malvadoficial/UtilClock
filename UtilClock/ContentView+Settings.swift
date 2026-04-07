@@ -1,7 +1,99 @@
 import SwiftUI
+import Combine
 #if os(macOS)
 import AppKit
+import MapKit
 import UniformTypeIdentifiers
+#endif
+
+#if os(macOS)
+struct WeatherLocationSuggestion: Identifiable, Equatable {
+    let id = UUID()
+    let title: String
+    let subtitle: String
+    let completion: MKLocalSearchCompletion
+}
+
+@MainActor
+final class WeatherLocationSearchModel: NSObject, ObservableObject, MKLocalSearchCompleterDelegate {
+    @Published var query = ""
+    @Published var suggestions: [WeatherLocationSuggestion] = []
+    @Published var isResolvingSelection = false
+
+    private let completer = MKLocalSearchCompleter()
+
+    override init() {
+        super.init()
+        completer.delegate = self
+        completer.resultTypes = [.address, .pointOfInterest]
+    }
+
+    func updateQuery(_ newValue: String) {
+        query = newValue
+        let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.isEmpty == false else {
+            suggestions = []
+            completer.queryFragment = ""
+            return
+        }
+        completer.queryFragment = trimmed
+    }
+
+    func completerDidUpdateResults(_ completer: MKLocalSearchCompleter) {
+        suggestions = completer.results.prefix(8).map {
+            WeatherLocationSuggestion(title: $0.title, subtitle: $0.subtitle, completion: $0)
+        }
+    }
+
+    func completer(_ completer: MKLocalSearchCompleter, didFailWithError error: Error) {
+        suggestions = []
+    }
+
+    func clear() {
+        query = ""
+        suggestions = []
+        isResolvingSelection = false
+        completer.queryFragment = ""
+    }
+
+    func resolve(_ suggestion: WeatherLocationSuggestion, completion: @escaping (Result<WeatherResolvedLocation, Error>) -> Void) {
+        isResolvingSelection = true
+        let request = MKLocalSearch.Request(completion: suggestion.completion)
+        let search = MKLocalSearch(request: request)
+        search.start { [weak self] response, error in
+            guard let self else { return }
+            self.isResolvingSelection = false
+
+            if let item = response?.mapItems.first {
+                let coordinate = item.location.coordinate
+                let parts = [suggestion.title, suggestion.subtitle]
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { $0.isEmpty == false }
+                completion(.success(WeatherResolvedLocation(latitude: coordinate.latitude, longitude: coordinate.longitude, locationName: parts.joined(separator: ", "))))
+                return
+            }
+
+            completion(.failure(error ?? NSError(domain: "WeatherLocationSearch", code: 1, userInfo: [NSLocalizedDescriptionKey: "no se pudo resolver la ubicacion"])))
+        }
+    }
+}
+#else
+@MainActor
+final class WeatherLocationSearchModel: ObservableObject {
+    @Published var query = ""
+    @Published var suggestions: [String] = []
+    @Published var isResolvingSelection = false
+
+    func updateQuery(_ newValue: String) {
+        query = newValue
+    }
+
+    func clear() {
+        query = ""
+        suggestions = []
+        isResolvingSelection = false
+    }
+}
 #endif
 
 extension ContentView {
@@ -266,6 +358,86 @@ extension ContentView {
                                     .overlay(
                                         RoundedRectangle(cornerRadius: 6, style: .continuous)
                                             .stroke(phosphorColor.opacity(preferredFullscreen ? 0.4 : 0.9), lineWidth: 1)
+                                    )
+                            }
+                            .buttonStyle(.plain)
+                        }
+
+                        Divider()
+                            .background(phosphorDim.opacity(0.4))
+                            .padding(.vertical, 6)
+
+                        Text("Tiempo / Weather")
+                            .font(.system(size: 20, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(phosphorDim)
+
+                        Text(weatherManualLocationSummary)
+                            .font(.system(size: 13, weight: .regular, design: .monospaced))
+                            .foregroundStyle(phosphorDim)
+
+                        VStack(alignment: .leading, spacing: 10) {
+                            TextField("Buscar ciudad o lugar", text: Binding(
+                                get: { weatherLocationSearch.query },
+                                set: { weatherLocationSearch.updateQuery($0) }
+                            ))
+                            .textFieldStyle(.roundedBorder)
+                            .font(.system(size: 14, weight: .regular, design: .monospaced))
+                            .frame(maxWidth: 320)
+
+                            if weatherLocationSearch.isResolvingSelection {
+                                Text("resolviendo ubicacion...")
+                                    .font(.system(size: 13, weight: .regular, design: .monospaced))
+                                    .foregroundStyle(phosphorDim)
+                            } else if weatherLocationSearch.suggestions.isEmpty == false {
+                                VStack(spacing: 7) {
+                                    ForEach(weatherLocationSearch.suggestions) { suggestion in
+                                        Button(action: {
+                                            applyManualWeatherLocationSuggestion(suggestion)
+                                        }) {
+                                            HStack(alignment: .top, spacing: 10) {
+                                                Image(systemName: "mappin.and.ellipse")
+                                                    .font(.system(size: 14, weight: .semibold))
+                                                    .foregroundStyle(phosphorColor)
+                                                    .frame(width: 18, alignment: .center)
+
+                                                VStack(alignment: .leading, spacing: 2) {
+                                                    Text(suggestion.title)
+                                                        .font(.system(size: 15, weight: .semibold, design: .monospaced))
+                                                        .foregroundStyle(phosphorColor)
+                                                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                                                    if suggestion.subtitle.isEmpty == false {
+                                                        Text(suggestion.subtitle)
+                                                            .font(.system(size: 12, weight: .regular, design: .monospaced))
+                                                            .foregroundStyle(phosphorDim)
+                                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                                    }
+                                                }
+                                            }
+                                            .padding(.horizontal, 10)
+                                            .padding(.vertical, 8)
+                                            .background(Color.black.opacity(0.18))
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                                    .stroke(phosphorColor.opacity(0.2), lineWidth: 1)
+                                            )
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+                                }
+                                .frame(maxWidth: 420, alignment: .leading)
+                            }
+
+                            Button(action: clearManualWeatherLocation) {
+                                Text("Limpiar ubicacion")
+                                    .font(.system(size: 14, weight: .semibold, design: .monospaced))
+                                    .foregroundStyle(phosphorColor)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 8)
+                                    .background(Color.black.opacity(0.35))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                            .stroke(phosphorColor.opacity(0.4), lineWidth: 1)
                                     )
                             }
                             .buttonStyle(.plain)
@@ -800,6 +972,21 @@ extension ContentView {
             menuBarOnlyMode = false
         }
 
+        weatherManualLocationName = defaults.string(forKey: "utilclock.weather.manualLocationName")
+        if defaults.object(forKey: "utilclock.weather.manualLatitude") != nil,
+           defaults.object(forKey: "utilclock.weather.manualLongitude") != nil {
+            weatherManualLatitude = defaults.double(forKey: "utilclock.weather.manualLatitude")
+            weatherManualLongitude = defaults.double(forKey: "utilclock.weather.manualLongitude")
+            if let manualName = weatherManualLocationName, manualName.isEmpty == false {
+                weatherLocationName = manualName
+                weatherLatitude = weatherManualLatitude
+                weatherLongitude = weatherManualLongitude
+            }
+        } else {
+            weatherManualLatitude = nil
+            weatherManualLongitude = nil
+        }
+
         let savedPongFieldSize = defaults.integer(forKey: "utilclock.pongFieldSizeLevel")
         if savedPongFieldSize >= 1, savedPongFieldSize <= 4 {
             pongFieldSizeLevel = savedPongFieldSize
@@ -911,6 +1098,64 @@ extension ContentView {
         defaults.set(gameHighscoresByKey, forKey: "utilclock.gameHighscores")
         defaults.set(preferredFullscreen, forKey: preferredFullscreenKey)
         defaults.set(menuBarOnlyMode, forKey: menuBarOnlyModeKey)
+        defaults.set(weatherManualLocationName, forKey: "utilclock.weather.manualLocationName")
+        defaults.set(weatherManualLatitude, forKey: "utilclock.weather.manualLatitude")
+        defaults.set(weatherManualLongitude, forKey: "utilclock.weather.manualLongitude")
+    }
+
+    var weatherManualLocationSummary: String {
+        if let name = weatherManualLocationName, name.isEmpty == false {
+            return "Ubicacion actual del tiempo: \(name)"
+        }
+        return "Ubicacion actual del tiempo: sin configurar"
+    }
+
+    #if os(macOS)
+    func applyManualWeatherLocationSuggestion(_ suggestion: WeatherLocationSuggestion) {
+        weatherLocationSearch.resolve(suggestion) { result in
+            Task { @MainActor in
+                switch result {
+                case .success(let resolvedLocation):
+                    weatherManualLocationName = resolvedLocation.locationName
+                    weatherManualLatitude = resolvedLocation.latitude
+                    weatherManualLongitude = resolvedLocation.longitude
+                    weatherLatitude = resolvedLocation.latitude
+                    weatherLongitude = resolvedLocation.longitude
+                    weatherLocationName = resolvedLocation.locationName
+                    weatherLastRefresh = nil
+                    weatherRetryNotBefore = nil
+                    weatherErrorText = nil
+                    weatherLocationSearch.query = resolvedLocation.locationName
+                    weatherLocationSearch.suggestions = []
+                    saveModeVisibilitySettings()
+                    refreshWeatherDataIfNeeded(force: true)
+                case .failure(let error):
+                    weatherErrorText = error.localizedDescription
+                }
+            }
+        }
+    }
+    #endif
+
+    func clearManualWeatherLocation() {
+        weatherManualLocationName = nil
+        weatherManualLatitude = nil
+        weatherManualLongitude = nil
+        weatherLatitude = nil
+        weatherLongitude = nil
+        weatherLocationName = ""
+        weatherCurrentTemperatureC = nil
+        weatherCurrentWeatherCode = 0
+        weatherCurrentWindKmh = nil
+        weatherTodayMinC = nil
+        weatherTodayMaxC = nil
+        weatherForecastDays = []
+        weatherLastRefresh = nil
+        weatherRetryNotBefore = nil
+        weatherLoading = false
+        weatherErrorText = nil
+        weatherLocationSearch.clear()
+        saveModeVisibilitySettings()
     }
 
     func rotatePongFieldSize(forward: Bool) {
