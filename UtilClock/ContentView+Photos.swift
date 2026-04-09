@@ -6,6 +6,10 @@ import Photos
 extension ContentView {
     var photosTransitionDuration: Double { 0.9 }
 
+    var photosItemCount: Int {
+        photosSourceType == "album" ? photosAlbumAssetIDs.count : photosImageURLs.count
+    }
+
     var photosClockColor: Color {
         let cycleSeconds = 900.0
         let t = Date().timeIntervalSinceReferenceDate
@@ -37,8 +41,7 @@ extension ContentView {
         GeometryReader { geometry in
             ZStack {
                 Color.black
-                if let url = photosImageURLs[safe: photosCurrentIndex],
-                   let image = NSImage(contentsOf: url) {
+                if let image = currentPhotosPlaybackImage {
                     ZStack {
                         Image(nsImage: image)
                             .resizable()
@@ -53,7 +56,7 @@ extension ContentView {
                             .scaledToFit()
                             .frame(width: geometry.size.width, height: geometry.size.height)
                     }
-                    .id(url.absoluteString)
+                    .id(photosPlaybackImageIdentity)
                     .transition(.opacity)
                     .animation(.easeInOut(duration: photosTransitionDuration), value: photosCurrentIndex)
                 } else {
@@ -79,6 +82,12 @@ extension ContentView {
             .onTapGesture {
                 stopPhotosSlideshow()
                 splitFullscreenTarget = .none
+            }
+            .onAppear {
+                loadCurrentAlbumPlaybackImageIfNeeded(targetSize: geometry.size)
+            }
+            .onChange(of: photosCurrentIndex) { _, _ in
+                loadCurrentAlbumPlaybackImageIfNeeded(targetSize: geometry.size)
             }
         }
     }
@@ -210,7 +219,7 @@ extension ContentView {
                         Text("\(L10n.photosCount):")
                             .font(.system(size: max(13, dateSize * 0.85), weight: .semibold, design: .monospaced))
                             .foregroundStyle(phosphorDim)
-                        Text("\(photosImageURLs.count)")
+                        Text("\(photosItemCount)")
                             .font(.system(size: max(14, dateSize * 0.9), weight: .semibold, design: .monospaced))
                             .foregroundStyle(phosphorColor)
                     }
@@ -247,12 +256,28 @@ extension ContentView {
     }
 
     var canStartPhotos: Bool {
+        if photosSourceType == "album" {
+            if photosAlbumAssetIDs.isEmpty == false { return true }
+            return photosSelectedAlbumID.isEmpty == false && photosLoading == false
+        }
         if photosLoading { return false }
         if photosImageURLs.isEmpty == false { return true }
-        if photosSourceType == "album" {
-            return photosSelectedAlbumID.isEmpty == false
-        }
         return photosSelectedFolderPath.isEmpty == false
+    }
+
+    var currentPhotosPlaybackImage: NSImage? {
+        if photosSourceType == "album" {
+            return photosCurrentAlbumImage
+        }
+        guard let url = photosImageURLs[safe: photosCurrentIndex] else { return nil }
+        return NSImage(contentsOf: url)
+    }
+
+    var photosPlaybackImageIdentity: String {
+        if photosSourceType == "album" {
+            return photosAlbumAssetIDs[safe: photosCurrentIndex] ?? "album-\(photosCurrentIndex)"
+        }
+        return photosImageURLs[safe: photosCurrentIndex]?.absoluteString ?? "folder-\(photosCurrentIndex)"
     }
 
     func photosCapsuleButtonStyle(active: Bool) -> some PrimitiveButtonStyle {
@@ -344,31 +369,39 @@ extension ContentView {
 
     func loadPhotosAlbums() {
         guard photosPermissionStatus == "authorized" || photosPermissionStatus == "limited" else { return }
+        let requestID = UUID()
+        photosAlbumsLoadRequestID = requestID
 
-        var byID: [String: PhotosAlbum] = [:]
-        let options = PHFetchOptions()
+        DispatchQueue.global(qos: .userInitiated).async {
+            var byID: [String: PhotosAlbum] = [:]
+            let options = PHFetchOptions()
 
-        let sources: [(PHAssetCollectionType, PHAssetCollectionSubtype)] = [
-            (.album, .any),
-            (.smartAlbum, .any)
-        ]
-        for source in sources {
-            let fetch = PHAssetCollection.fetchAssetCollections(with: source.0, subtype: source.1, options: nil)
-            fetch.enumerateObjects { collection, _, _ in
-                let count = PHAsset.fetchAssets(in: collection, options: options).count
-                guard count > 0 else { return }
-                let title = collection.localizedTitle?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "Album"
-                byID[collection.localIdentifier] = PhotosAlbum(
-                    id: collection.localIdentifier,
-                    title: title,
-                    count: count
-                )
+            let sources: [(PHAssetCollectionType, PHAssetCollectionSubtype)] = [
+                (.album, .any),
+                (.smartAlbum, .any)
+            ]
+            for source in sources {
+                let fetch = PHAssetCollection.fetchAssetCollections(with: source.0, subtype: source.1, options: nil)
+                fetch.enumerateObjects { collection, _, _ in
+                    let count = PHAsset.fetchAssets(in: collection, options: options).count
+                    guard count > 0 else { return }
+                    let title = collection.localizedTitle?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "Album"
+                    byID[collection.localIdentifier] = PhotosAlbum(
+                        id: collection.localIdentifier,
+                        title: title,
+                        count: count
+                    )
+                }
+            }
+
+            var result = Array(byID.values)
+            result.sort { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
+
+            DispatchQueue.main.async {
+                guard photosAlbumsLoadRequestID == requestID else { return }
+                photosAlbums = result
             }
         }
-
-        var result = Array(byID.values)
-        result.sort { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
-        photosAlbums = result
     }
 
     func selectPhotosAlbum(_ album: PhotosAlbum) {
@@ -376,6 +409,10 @@ extension ContentView {
         photosSelectedAlbumID = album.id
         photosSelectedAlbumName = album.title
         photosShowAlbumsList = false
+        photosImageURLs = []
+        photosAlbumAssetIDs = []
+        photosCurrentAlbumImage = nil
+        photosCurrentIndex = 0
         savePhotoModeSettings()
         loadImagesFromSelectedPhotosAlbum()
     }
@@ -390,6 +427,10 @@ extension ContentView {
         if panel.runModal() == .OK, let url = panel.url {
             photosSourceType = "folder"
             photosSelectedFolderPath = url.path
+            photosSelectedAlbumID = ""
+            photosSelectedAlbumName = ""
+            photosAlbumAssetIDs = []
+            photosCurrentAlbumImage = nil
             photosSelectedFolderBookmark = try? url.bookmarkData(
                 options: [.withSecurityScope],
                 includingResourceValuesForKeys: nil,
@@ -403,6 +444,9 @@ extension ContentView {
 
     func loadImagesFromSelectedPhotosFolder() {
         guard photosSourceType == "folder" else { return }
+        photosLoading = false
+        photosStartWhenReady = false
+        photosCurrentAlbumImage = nil
         guard let folderURL = resolvePhotosFolderURL() else {
             photosImageURLs = []
             photosCurrentIndex = 0
@@ -437,51 +481,38 @@ extension ContentView {
         guard photosSourceType == "album", photosSelectedAlbumID.isEmpty == false else { return }
         guard photosPermissionStatus == "authorized" || photosPermissionStatus == "limited" else {
             photosImageURLs = []
+            photosAlbumAssetIDs = []
+            photosCurrentAlbumImage = nil
+            photosLoading = false
             return
         }
 
         photosLoading = true
         let selectedID = photosSelectedAlbumID
+        let requestID = UUID()
+        photosAlbumLoadRequestID = requestID
         DispatchQueue.global(qos: .userInitiated).async {
             let fetchCollection = PHAssetCollection.fetchAssetCollections(withLocalIdentifiers: [selectedID], options: nil)
             guard let collection = fetchCollection.firstObject else {
                 DispatchQueue.main.async {
+                    guard photosAlbumLoadRequestID == requestID else { return }
                     photosLoading = false
-                    photosImageURLs = []
+                    photosAlbumAssetIDs = []
+                    photosCurrentAlbumImage = nil
                 }
                 return
             }
             let assets = PHAsset.fetchAssets(in: collection, options: nil)
-            let manager = PHImageManager.default()
-            let opts = PHImageRequestOptions()
-            opts.isSynchronous = true
-            opts.isNetworkAccessAllowed = true
-            opts.deliveryMode = .highQualityFormat
-            opts.version = .current
-
-            let cacheRoot = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
-                .appendingPathComponent("utilclock-photo-cache", isDirectory: true)
-            let albumDir = cacheRoot.appendingPathComponent(selectedID.replacingOccurrences(of: "/", with: "_"), isDirectory: true)
-            try? FileManager.default.createDirectory(at: albumDir, withIntermediateDirectories: true)
-
-            var urls: [URL] = []
-            assets.enumerateObjects { asset, index, _ in
-                var requestURL: URL?
-                manager.requestImageDataAndOrientation(for: asset, options: opts) { data, _, _, _ in
-                    guard let data else { return }
-                    let out = albumDir.appendingPathComponent("\(index)-\(asset.localIdentifier.replacingOccurrences(of: "/", with: "_")).jpg")
-                    if (try? data.write(to: out, options: .atomic)) != nil {
-                        requestURL = out
-                    }
-                }
-                if let requestURL {
-                    urls.append(requestURL)
-                }
+            var ids: [String] = []
+            assets.enumerateObjects { asset, _, _ in
+                ids.append(asset.localIdentifier)
             }
 
             DispatchQueue.main.async {
+                guard photosAlbumLoadRequestID == requestID else { return }
                 photosLoading = false
-                photosImageURLs = urls
+                photosAlbumAssetIDs = ids
+                photosCurrentAlbumImage = nil
                 photosCurrentIndex = 0
                 if photosStartWhenReady {
                     beginPhotosSlideshowWithCurrentImages()
@@ -493,7 +524,7 @@ extension ContentView {
     func startPhotosSlideshow() {
         photosStartWhenReady = false
         if photosSourceType == "album" {
-            if photosImageURLs.isEmpty {
+            if photosAlbumAssetIDs.isEmpty {
                 photosStartWhenReady = true
                 loadImagesFromSelectedPhotosAlbum()
                 return
@@ -507,12 +538,13 @@ extension ContentView {
     }
 
     func beginPhotosSlideshowWithCurrentImages() {
-        guard photosImageURLs.isEmpty == false else {
+        let count = photosItemCount
+        guard count > 0 else {
             photosStartWhenReady = false
             return
         }
 
-        photosCurrentIndex = Int.random(in: 0..<photosImageURLs.count)
+        photosCurrentIndex = Int.random(in: 0..<count)
         photosIsRunning = true
         splitFullscreenTarget = .bottom
         photosStartWhenReady = false
@@ -523,15 +555,16 @@ extension ContentView {
         photosTimer?.invalidate()
         photosTimer = Timer.scheduledTimer(withTimeInterval: max(1.0, photosSlideDurationSeconds), repeats: true) { _ in
             DispatchQueue.main.async {
-                guard photosImageURLs.isEmpty == false else { return }
-                if photosImageURLs.count == 1 {
+                let count = photosItemCount
+                guard count > 0 else { return }
+                if count == 1 {
                     withAnimation(.easeInOut(duration: photosTransitionDuration)) {
                         photosCurrentIndex = 0
                     }
                 } else {
                     var next = photosCurrentIndex
                     while next == photosCurrentIndex {
-                        next = Int.random(in: 0..<photosImageURLs.count)
+                        next = Int.random(in: 0..<count)
                     }
                     withAnimation(.easeInOut(duration: photosTransitionDuration)) {
                         photosCurrentIndex = next
@@ -548,6 +581,45 @@ extension ContentView {
         photosTimer?.invalidate()
         photosTimer = nil
         photosIsRunning = false
+        photosStartWhenReady = false
+    }
+
+    func loadCurrentAlbumPlaybackImageIfNeeded(targetSize: CGSize) {
+        guard photosSourceType == "album", photosIsRunning else { return }
+        guard let assetID = photosAlbumAssetIDs[safe: photosCurrentIndex] else {
+            photosCurrentAlbumImage = nil
+            return
+        }
+
+        let requestID = UUID()
+        photosImageRenderRequestID = requestID
+
+        let fetchResult = PHAsset.fetchAssets(withLocalIdentifiers: [assetID], options: nil)
+        guard let asset = fetchResult.firstObject else {
+            photosCurrentAlbumImage = nil
+            return
+        }
+
+        let scale = hostWindow?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2.0
+        let pixelWidth = max(targetSize.width * scale, 1200)
+        let pixelHeight = max(targetSize.height * scale, 900)
+
+        let options = PHImageRequestOptions()
+        options.deliveryMode = .highQualityFormat
+        options.resizeMode = .fast
+        options.isNetworkAccessAllowed = true
+
+        PHImageManager.default().requestImage(
+            for: asset,
+            targetSize: CGSize(width: pixelWidth, height: pixelHeight),
+            contentMode: .aspectFit,
+            options: options
+        ) { image, _ in
+            DispatchQueue.main.async {
+                guard photosImageRenderRequestID == requestID else { return }
+                photosCurrentAlbumImage = image
+            }
+        }
     }
 
     func savePhotoModeSettings() {

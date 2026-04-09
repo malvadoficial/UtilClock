@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.2.13 - 2026-04-09
+
+- Photos album playback improvements:
+  - Switched album slideshows to render directly from Photos assets instead of exporting temp image files.
+  - Added request guards to avoid stale album/image updates while switching sources.
+  - Improved album/folder state resets so `Ver Fotos` starts cleanly when changing source.
+- macOS startup fix:
+  - Fixed a launch crash caused by an invalid `NSWindow.collectionBehavior` combination.
+  - Kept the stronger main-window recovery path for wake/reopen flows without breaking app startup.
+- Included the previously local weather update:
+  - Added manual weather location search support.
+
 ## v1.2.12 - 2026-04-06
 
 - Dual-screen mode routing:
