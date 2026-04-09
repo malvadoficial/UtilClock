@@ -23,6 +23,7 @@ struct UtilClockApp: App {
     @AppStorage("utilclock.presentation.menuBarOnly") private var menuBarOnlyMode = false
     @AppStorage("utilclock.window.preferredFullscreen") private var preferredFullscreen = true
     @State private var statusBarController = StatusBarController()
+    @State private var windowCoordinator = WindowCoordinator()
     @State private var pendingAccessoryActivation = false
     #endif
 
@@ -34,10 +35,11 @@ struct UtilClockApp: App {
     }
 
     var body: some Scene {
-        WindowGroup {
+        WindowGroup(id: WindowCoordinator.mainWindowID) {
             ContentView()
                 #if os(macOS)
                 .background(BorderlessWindowConfigurator(alwaysOnTop: alwaysOnTop))
+                .background(MainWindowRegistrationView(windowCoordinator: windowCoordinator))
                 .onAppear {
                     appDelegate.reopenHandler = { [self] in
                         recoverMainWindowVisibility(triggeredByWake: false)
@@ -65,8 +67,17 @@ struct UtilClockApp: App {
                 .onReceive(NotificationCenter.default.publisher(for: NSWorkspace.didWakeNotification)) { _ in
                     recoverMainWindowVisibility(triggeredByWake: true)
                 }
+                .onReceive(NotificationCenter.default.publisher(for: NSWorkspace.screensDidWakeNotification)) { _ in
+                    recoverMainWindowVisibility(triggeredByWake: true)
+                }
+                .onReceive(NotificationCenter.default.publisher(for: NSWorkspace.screensDidSleepNotification)) { _ in
+                    recoverMainWindowVisibility(triggeredByWake: true, remainingAttempts: 6)
+                }
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.didChangeScreenParametersNotification)) { _ in
                     recoverMainWindowVisibility(triggeredByWake: true)
+                }
+                .onReceive(NotificationCenter.default.publisher(for: NSApplication.didUnhideNotification)) { _ in
+                    recoverMainWindowVisibility(triggeredByWake: false)
                 }
                 #endif
                 #if os(iOS) || os(tvOS)
@@ -161,6 +172,7 @@ private extension UtilClockApp {
             return window
         }
 
+        windowCoordinator.openMainWindowIfNeeded()
         NSApp.unhide(nil)
         NSApp.activate(ignoringOtherApps: true)
         NSRunningApplication.current.activate(options: [.activateAllWindows])
@@ -170,11 +182,14 @@ private extension UtilClockApp {
     }
 
     func bringWindowToFront(_ window: NSWindow) {
-        window.collectionBehavior.formUnion([.moveToActiveSpace, .canJoinAllSpaces])
+        restoreWindowVisualState(window)
+        window.collectionBehavior = mainWindowCollectionBehavior()
         NSApp.unhide(nil)
         NSRunningApplication.current.activate(options: [.activateAllWindows])
+        window.order(.above, relativeTo: 0)
         window.orderFrontRegardless()
         window.makeKeyAndOrderFront(nil)
+        window.displayIfNeeded()
         NSApp.activate(ignoringOtherApps: true)
     }
 
@@ -203,12 +218,15 @@ private extension UtilClockApp {
             targetWindow.deminiaturize(nil)
         }
 
+        restoreWindowVisualState(targetWindow)
         normalizeWindowPositionIfNeeded(targetWindow)
         bringWindowToFront(targetWindow)
 
         if triggeredByWake {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
                 let windowIsVisible = targetWindow.isVisible &&
+                    targetWindow.alphaValue > 0.01 &&
+                    targetWindow.contentView?.isHidden != true &&
                     (targetWindow.occlusionState.contains(.visible) || targetWindow.styleMask.contains(.fullScreen))
                 if windowIsVisible == false {
                     hardResetWindowVisibility(targetWindow)
@@ -274,10 +292,15 @@ private extension UtilClockApp {
         let isFullscreen = window.styleMask.contains(.fullScreen)
 
         let relocateWindow = {
+            restoreWindowVisualState(window)
             window.setFrame(restoreFullscreen ? fallbackScreen.frame : fallbackScreen.visibleFrame, display: true, animate: false)
             bringWindowToFront(window)
             if restoreFullscreen && window.styleMask.contains(.fullScreen) == false {
                 window.toggleFullScreen(nil)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                    restoreWindowVisualState(window)
+                    bringWindowToFront(window)
+                }
             }
         }
 
@@ -309,6 +332,21 @@ private extension UtilClockApp {
         return NSScreen.main ?? NSScreen.screens.first
     }
 
+    func restoreWindowVisualState(_ window: NSWindow) {
+        window.alphaValue = 1
+        window.isOpaque = true
+        window.backgroundColor = .black
+        window.hasShadow = false
+        window.ignoresMouseEvents = false
+        window.isMovableByWindowBackground = true
+        window.contentView?.isHidden = false
+        window.contentView?.needsDisplay = true
+    }
+
+    func mainWindowCollectionBehavior() -> NSWindow.CollectionBehavior {
+        [.fullScreenPrimary, .fullScreenAllowsTiling, .moveToActiveSpace]
+    }
+
     func disableLegacyLaunchAtLogin() {
         do {
             if SMAppService.mainApp.status == .enabled {
@@ -324,13 +362,31 @@ private final class MacAppDelegate: NSObject, NSApplicationDelegate {
     var reopenHandler: (() -> Void)?
     var didBecomeActiveHandler: (() -> Void)?
 
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        ProcessInfo.processInfo.disableAutomaticTermination("Keep UtilClock alive while restoring its main window.")
+    }
+
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         reopenHandler?()
         return true
     }
 
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        false
+    }
+
     func applicationDidBecomeActive(_ notification: Notification) {
         didBecomeActiveHandler?()
+    }
+}
+
+private final class WindowCoordinator {
+    static let mainWindowID = "main-window"
+
+    var openMainWindow: (() -> Void)?
+
+    func openMainWindowIfNeeded() {
+        openMainWindow?()
     }
 }
 
@@ -486,12 +542,33 @@ private struct BorderlessWindowConfigurator: NSViewRepresentable {
             window.standardWindowButton(.closeButton)?.isHidden = true
             window.standardWindowButton(.miniaturizeButton)?.isHidden = true
             window.standardWindowButton(.zoomButton)?.isHidden = true
-            window.collectionBehavior = [.fullScreenPrimary, .fullScreenAllowsTiling]
+            window.collectionBehavior = [.fullScreenPrimary, .fullScreenAllowsTiling, .moveToActiveSpace]
             coordinator.configuredWindowNumber = window.windowNumber
         }
 
         window.level = alwaysOnTop ? .floating : .normal
+        window.alphaValue = 1
+        window.contentView?.isHidden = false
 
+    }
+}
+
+private struct MainWindowRegistrationView: View {
+    @Environment(\.openWindow) private var openWindow
+    let windowCoordinator: WindowCoordinator
+
+    var body: some View {
+        Color.clear
+            .frame(width: 0, height: 0)
+            .onAppear {
+                registerOpenWindowAction()
+            }
+    }
+
+    private func registerOpenWindowAction() {
+        windowCoordinator.openMainWindow = {
+            openWindow(id: WindowCoordinator.mainWindowID)
+        }
     }
 }
 #endif

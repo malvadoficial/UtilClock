@@ -557,6 +557,8 @@ struct ContentView: View {
     @State var photosSelectedFolderPath = ""
     @State var photosSelectedFolderBookmark: Data?
     @State var photosImageURLs: [URL] = []
+    @State var photosAlbumAssetIDs: [String] = []
+    @State var photosCurrentAlbumImage: NSImage?
     @State var photosCurrentIndex = 0
     @State var photosIsRunning = false
     @State var photosShowClock = true
@@ -571,6 +573,9 @@ struct ContentView: View {
     @State var photosLoading = false
     @State var photosStartWhenReady = false
     @State var photosSourcesHydrated = false
+    @State var photosAlbumsLoadRequestID = UUID()
+    @State var photosAlbumLoadRequestID = UUID()
+    @State var photosImageRenderRequestID = UUID()
     #if os(macOS)
     @State var draggedScreenMode: ScreenModeItem?
     @State var hostWindow: NSWindow?
